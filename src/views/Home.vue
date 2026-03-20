@@ -48,7 +48,6 @@
           <div class="timelock-card" v-if="timelockCore">
             <div class="card-header">
               <span class="card-title">核心时间锁</span>
-              <span class="card-address">{{ TIMELOCK_CORE_ADDRESS }}</span>
             </div>
             <div class="card-stats">
               <div class="stat-item">
@@ -73,7 +72,6 @@
           <div class="timelock-card" v-if="timelockEco">
             <div class="card-header">
               <span class="card-title">生态时间锁</span>
-              <span class="card-address">{{ TIMELOCK_ECO_ADDRESS }}</span>
             </div>
             <div class="card-stats">
               <div class="stat-item">
@@ -214,7 +212,16 @@ const formatNumber = (num: bigint): string => {
 }
 
 const formatEnergy = (num: bigint): string => {
-  return formatUnits(num, 18)
+  const value = Number(formatUnits(num, 18))
+  
+  // 处理非常大的数字（万、亿）
+  if (value >= 100000000) {
+    return (value / 100000000).toFixed(2) + '亿 J'
+  } else if (value >= 10000) {
+    return (value / 10000).toFixed(2) + '万 J'
+  } else {
+    return value.toFixed(2) + ' J'
+  }
 }
 
 const fetchTimelockData = async (address: string) => {
