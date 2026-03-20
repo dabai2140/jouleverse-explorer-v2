@@ -53,19 +53,19 @@
             <div class="card-stats">
               <div class="stat-item">
                 <span class="stat-label">月度预算</span>
-                <span class="stat-value">{{ formatEnergy(timelockCore.monthlyBudget) }} J</span>
+                <span class="stat-value">{{ formatEnergy(timelockCore.monthlyBudget) }}</span>
               </div>
               <div class="stat-item">
                 <span class="stat-label">已使用</span>
-                <span class="stat-value">{{ formatEnergy(timelockCore.used) }} J</span>
+                <span class="stat-value">{{ formatEnergy(timelockCore.used) }}</span>
               </div>
               <div class="stat-item">
                 <span class="stat-label">已释放</span>
-                <span class="stat-value">{{ formatEnergy(timelockCore.released) }} J</span>
+                <span class="stat-value">{{ formatEnergy(timelockCore.released) }}</span>
               </div>
               <div class="stat-item">
                 <span class="stat-label">可用余额</span>
-                <span class="stat-value highlight">{{ formatEnergy(timelockCore.available) }} J</span>
+                <span class="stat-value highlight">{{ formatEnergy(timelockCore.available) }}</span>
               </div>
             </div>
           </div>
@@ -78,19 +78,19 @@
             <div class="card-stats">
               <div class="stat-item">
                 <span class="stat-label">月度预算</span>
-                <span class="stat-value">{{ formatEnergy(timelockEco.monthlyBudget) }} J</span>
+                <span class="stat-value">{{ formatEnergy(timelockEco.monthlyBudget) }}</span>
               </div>
               <div class="stat-item">
                 <span class="stat-label">已使用</span>
-                <span class="stat-value">{{ formatEnergy(timelockEco.used) }} J</span>
+                <span class="stat-value">{{ formatEnergy(timelockEco.used) }}</span>
               </div>
               <div class="stat-item">
                 <span class="stat-label">已释放</span>
-                <span class="stat-value">{{ formatEnergy(timelockEco.released) }} J</span>
+                <span class="stat-value">{{ formatEnergy(timelockEco.released) }}</span>
               </div>
               <div class="stat-item">
                 <span class="stat-label">可用余额</span>
-                <span class="stat-value highlight">{{ formatEnergy(timelockEco.available) }} J</span>
+                <span class="stat-value highlight">{{ formatEnergy(timelockEco.available) }}</span>
               </div>
             </div>
           </div>
@@ -214,21 +214,7 @@ const formatNumber = (num: bigint): string => {
 }
 
 const formatEnergy = (num: bigint): string => {
-  const value = formatUnits(num, 18)
-  const numValue = parseFloat(value)
-
-  // 超过8位数（>= 100,000,000）转换为亿J
-  if (numValue >= 100000000) {
-    return (numValue / 100000000).toFixed(2) + '亿J'
-  }
-  // 超过4位数（>= 10,000）转换为万J
-  else if (numValue >= 10000) {
-    return (numValue / 10000).toFixed(2) + '万J'
-  }
-  // 小于4位数保持原样
-  else {
-    return value
-  }
+  return formatUnits(num, 18)
 }
 
 const fetchTimelockData = async (address: string) => {
@@ -290,33 +276,6 @@ const fetchAllTimelockData = async () => {
   }
 }
 
-const calculateNetworkUptime = async () => {
-  try {
-    // 获取区块0的时间戳
-    const genesisBlock = await client.getBlock({ blockNumber: 0n })
-    if (genesisBlock) {
-      const genesisTimestamp = Number(genesisBlock.timestamp)
-      const currentTimestamp = Math.floor(Date.now() / 1000)
-      const uptimeSeconds = currentTimestamp - genesisTimestamp
-
-      // 计算运行时间
-      const days = Math.floor(uptimeSeconds / 86400)
-      const hours = Math.floor((uptimeSeconds % 86400) / 3600)
-      const minutes = Math.floor((uptimeSeconds % 3600) / 60)
-
-      if (days > 0) {
-        networkUptime.value = `${days}天${hours}小时`
-      } else if (hours > 0) {
-        networkUptime.value = `${hours}小时${minutes}分钟`
-      } else {
-        networkUptime.value = `${minutes}分钟`
-      }
-    }
-  } catch (error) {
-    console.error('Failed to calculate network uptime:', error)
-  }
-}
-
 const fetchLatestBlocks = async () => {
   loading.value = true
   try {
@@ -361,8 +320,6 @@ const fetchLatestBlocks = async () => {
     networkStatus.value = 'offline'
   } finally {
     loading.value = false
-    // 计算网络运行时间
-    await calculateNetworkUptime()
   }
 }
 
@@ -561,7 +518,7 @@ onMounted(() => {
 
 .card-header {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 8px;
   margin-bottom: 16px;
   padding-bottom: 12px;
@@ -572,6 +529,12 @@ onMounted(() => {
   color: #1e293b;
   font-size: 1.1rem;
   font-weight: 600;
+}
+
+.card-address {
+  color: #64748b;
+  font-size: 0.8rem;
+  font-family: 'Courier New', monospace;
 }
 
 .card-stats {
@@ -741,44 +704,6 @@ onMounted(() => {
   }
   
   .search-box {
-    max-width: 100%;
-  }
-  
-  .section-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 12px;
-  }
-  
-  .block-details {
-    grid-template-columns: 1fr;
-  }
-}
-</style>
-lex-direction: column;
-    align-items: flex-start;
-    gap: 12px;
-  }
-  
-  .block-details {
-    grid-template-columns: 1fr;
-  }
-}
-</style>
-d-template-columns: 1fr;
-  }
-}
-</style>
-start;
-    gap: 12px;
-  }
-  
-  .block-details {
-    grid-template-columns: 1fr;
-  }
-}
-</style>
-.search-box {
     max-width: 100%;
   }
   
