@@ -1,317 +1,302 @@
 <template>
-  <div class="tx-detail">
+  <div class="transaction-detail">
     <div class="header">
-      <button class="back-btn" @click="goBack">← 返回</button>
-      <h1>交易详情</h1>
+      <button @click="$router.push('/')" class="back-btn">← 返回首页</button>
+      <h1 v-if="loading">加载交易中...</h1>
+      <h1 v-else-if="transaction">交易详情</h1>
+      <h1 v-else>交易未找到</h1>
     </div>
 
-    <div v-if="loading" class="loading">
-      加载中...
-    </div>
-
-    <div v-else-if="error" class="error">
-      {{ error }}
-    </div>
-
-    <div v-else-if="tx" class="content">
+    <div v-if="transaction" class="transaction-info">
       <div class="info-section">
         <h2>交易信息</h2>
         <div class="info-grid">
           <div class="info-item">
             <span class="label">交易哈希</span>
-            <span class="value hash">{{ tx.hash }}</span>
-          </div>
-          <div class="info-item">
-            <span class="label">区块高度</span>
-            <span class="value">{{ tx.blockNumber }}</span>
-          </div>
-          <div class="info-item">
-            <span class="label">区块哈希</span>
-            <span class="value hash">{{ tx.blockHash }}</span>
-          </div>
-          <div class="info-item">
-            <span class="label">交易索引</span>
-            <span class="value">{{ tx.transactionIndex }}</span>
-          </div>
-          <div class="info-item">
-            <span class="label">发送方</span>
-            <span class="value address">{{ tx.from }}</span>
-          </div>
-          <div class="info-item">
-            <span class="label">接收方</span>
-            <span class="value address">{{ tx.to || '合约创建' }}</span>
-          </div>
-          <div class="info-item">
-            <span class="label">数值</span>
-            <span class="value">{{ formattedValue }}</span>
-          </div>
-          <div class="info-item">
-            <span class="label">Gas</span>
-            <span class="value">{{ Number(tx.gas).toLocaleString() }}</span>
-          </div>
-          <div class="info-item" v-if="tx.gasUsed">
-            <span class="label">Gas Used</span>
-            <span class="value">{{ Number(tx.gasUsed).toLocaleString() }}</span>
-          </div>
-          <div class="info-item" v-if="tx.gasPrice">
-            <span class="label">Gas Price</span>
-            <span class="value">{{ formatWei(tx.gasPrice) }} Gwei</span>
-          </div>
-          <div class="info-item">
-            <span class="label">Nonce</span>
-            <span class="value">{{ tx.nonce }}</span>
+            <span class="value hash">{{ transaction.hash }}</span>
           </div>
           <div class="info-item">
             <span class="label">状态</span>
-            <span class="value status" :class="tx.status">{{ statusText }}</span>
+            <span class="value" :class="{ success: transaction.status === 'success', error: transaction.status === 'reverted' }">
+              {{ transaction.status === 'success' ? '成功' : '失败' }}
+            </span>
+          </div>
+          <div class="info-item">
+            <span class="label">区块</span>
+            <span class="value" @click="$router.push(`/block/${transaction.blockNumber}`)">
+              #{{ transaction.blockNumber }}
+            </span>
+          </div>
+          <div class="info-item">
+            <span class="label">时间戳</span>
+            <span class="value">{{ formatTimestamp(transaction.blockTimestamp) }}</span>
+          </div>
+          <div class="info-item">
+            <span class="label">发送方</span>
+            <span class="value hash" @click="$router.push(`/address/${transaction.from}`)">{{ transaction.from }}</span>
+          </div>
+          <div class="info-item">
+            <span class="label">接收方</span>
+            <span class="value hash" @click="$router.push(`/address/${transaction.to}`)">
+              {{ transaction.to || '合约创建' }}
+            </span>
+          </div>
+          <div class="info-item">
+            <span class="label">发送金额</span>
+            <span class="value">{{ formatValue(transaction.value) }} {{ symbol }}</span>
+          </div>
+          <div class="info-item" v-if="transaction.gasPrice">
+            <span class="label">Gas 价格</span>
+            <span class="value">{{ formatGas(transaction.gasPrice) }} Gwei</span>
+          </div>
+          <div class="info-item">
+            <span class="label">Gas 限制</span>
+            <span class="value">{{ formatNumber(transaction.gas) }}</span>
+          </div>
+          <div class="info-item">
+            <span class="label">Gas 使用</span>
+            <span class="value">{{ formatNumber(transaction.gasUsed || 0) }}</span>
+          </div>
+          <div class="info-item">
+            <span class="label">Gas 费用</span>
+            <span class="value">{{ formatValue(transaction.gasUsed || 0n * (transaction.gasPrice || 0n)) }} {{ symbol }}</span>
+          </div>
+          <div class="info-item">
+            <span class="label">随机数</span>
+            <span class="value">{{ transaction.nonce }}</span>
+          </div>
+          <div class="info-item">
+            <span class="label">输入数据</span>
+            <span class="value hash">{{ formatInput(transaction.input) }}</span>
           </div>
         </div>
       </div>
+    </div>
 
-      <div class="input-section" v-if="tx.input && tx.input !== '0x'">
-        <h2>Input Data</h2>
-        <div class="input-content">
-          {{ tx.input }}
-        </div>
-      </div>
+    <div v-else-if="!loading" class="error">
+      <p>未找到交易: {{ txHash }}</p>
+      <button @click="$router.push('/')" class="btn-primary">返回首页</button>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
-import { createPublicClient, http, formatUnits } from 'viem';
-import type { TransactionDetail } from '@/types/transaction';
+import { ref, onMounted } from 'vue'
+import { createPublicClient, http, formatUnits, formatEther } from 'viem'
+import { mainnet } from 'viem/chains'
 
-const route = useRoute();
-const router = useRouter();
+interface Props {
+  hash: string
+}
 
-const txHash = ref<string>(route.params.hash as string);
-const tx = ref<TransactionDetail | null>(null);
-const loading = ref(false);
-const error = ref<string | null>(null);
+const props = defineProps<Props>()
+
+const jouleverse = {
+  ...mainnet,
+  id: 3666,
+  name: 'Jouleverse',
+  nativeCurrency: {
+    name: 'Joule',
+    symbol: 'J',
+    decimals: 18,
+  },
+  rpcUrls: {
+    default: {
+      http: ['https://rpc.jnsdao.com:8503'],
+    },
+  },
+  blockExplorers: {
+    default: { name: 'JScan', url: 'https://jscan.jns' },
+  },
+}
 
 const client = createPublicClient({
-  transport: http('https://rpc.jnsdao.com:8503'),
-});
+  chain: jouleverse,
+  transport: http(),
+})
+
+const transaction = ref<any>(null)
+const loading = ref(true)
+const txHash = ref(props.hash)
+const symbol = ref('J')
+
+const formatTimestamp = (timestamp: bigint): string => {
+  const date = new Date(Number(timestamp) * 1000)
+  return date.toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  })
+}
+
+const formatValue = (value: bigint): string => {
+  return formatEther(value)
+}
+
+const formatGas = (gas: bigint): string => {
+  return formatUnits(gas, 9)
+}
+
+const formatNumber = (num: bigint): string => {
+  return formatUnits(num, 0)
+}
+
+const formatInput = (input: string): string => {
+  if (!input || input === '0x') return '无'
+  if (input.length <= 50) return input
+  return `${input.substring(0, 50)}...`
+}
 
 const loadTransaction = async () => {
-  loading.value = true;
-  error.value = null;
-
+  loading.value = true
   try {
     const txData = await client.getTransaction({
-      hash: txHash.value as `0x${string}`,
-    });
-
-    if (!txData) {
-      error.value = '交易不存在';
-      return;
-    }
-
+      hash: props.hash as `0x${string}`,
+    })
+    
     const receipt = await client.getTransactionReceipt({
-      hash: txHash.value as `0x${string}`,
-    });
-
-    tx.value = {
-      hash: txData.hash,
-      blockNumber: Number(txData.blockNumber),
-      blockHash: txData.blockHash,
-      transactionIndex: txData.transactionIndex,
-      from: txData.from,
-      to: txData.to,
-      value: txData.value.toString(),
-      gas: Number(txData.gas),
-      gasUsed: receipt ? Number(receipt.gasUsed) : undefined,
-      gasPrice: txData.gasPrice ? txData.gasPrice.toString() : undefined,
-      nonce: txData.nonce,
-      input: txData.input,
-      status: receipt?.status ? (receipt.status === 'success' ? 'success' : 'failed') : 'pending',
-    };
-  } catch (err) {
-    console.error('Failed to load transaction:', err);
-    error.value = '加载交易失败';
+      hash: props.hash as `0x${string}`,
+    })
+    
+    const block = await client.getBlock({
+      blockNumber: txData.blockNumber!,
+    })
+    
+    transaction.value = {
+      ...txData,
+      ...receipt,
+      blockTimestamp: block.timestamp,
+    }
+  } catch (error) {
+    console.error('Failed to fetch transaction:', error)
+    transaction.value = null
   } finally {
-    loading.value = false;
+    loading.value = false
   }
-};
-
-const formattedValue = computed(() => {
-  if (!tx.value) return '';
-  try {
-    const value = formatUnits(BigInt(tx.value.value), 18);
-    return `${value} J`;
-  } catch {
-    return `${tx.value.value} wei`;
-  }
-});
-
-const statusText = computed(() => {
-  if (!tx.value) return '';
-  switch (tx.value.status) {
-    case 'success':
-      return '✅ 成功';
-    case 'failed':
-      return '❌ 失败';
-    case 'pending':
-      return '⏳ 等待中';
-    default:
-      return '未知';
-  }
-});
-
-const formatWei = (wei: string): string => {
-  try {
-    const value = formatUnits(BigInt(wei), 9);
-    return value;
-  } catch {
-    return wei;
-  }
-};
-
-const goBack = () => {
-  router.push('/');
-};
+}
 
 onMounted(() => {
-  loadTransaction();
-});
+  loadTransaction()
+})
 </script>
 
 <style scoped>
-.tx-detail {
-  min-height: 100vh;
-  background: #f3f4f6;
+.transaction-detail {
+  max-width: 1200px;
+  margin: 0 auto;
   padding: 20px;
 }
 
 .header {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  margin-bottom: 32px;
-  background: white;
-  padding: 24px;
-  border-radius: 12px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  margin-bottom: 30px;
 }
 
 .back-btn {
-  padding: 8px 16px;
-  background: #f3f4f6;
+  background: #f1f5f9;
+  color: #64748b;
   border: none;
+  padding: 8px 16px;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 14px;
-  color: #374151;
-  transition: all 0.2s;
+  margin-bottom: 20px;
+  display: inline-block;
 }
 
 .back-btn:hover {
-  background: #e5e7eb;
+  background: #e2e8f0;
 }
 
 .header h1 {
+  color: #1e293b;
   margin: 0;
-  font-size: 24px;
-  font-weight: 600;
-  color: #1f2937;
 }
 
-.loading,
-.error {
-  background: white;
-  padding: 48px;
-  border-radius: 8px;
-  text-align: center;
-  color: #6b7280;
-}
-
-.error {
-  color: #ef4444;
-}
-
-.content {
-  max-width: 1200px;
-  margin: 0 auto;
+.transaction-info {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 30px;
 }
 
-.info-section,
-.input-section {
+.info-section {
   background: white;
-  padding: 24px;
-  border-radius: 12px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 20px;
 }
 
-.info-section h2,
-.input-section h2 {
+.info-section h2 {
+  color: #1e293b;
   margin: 0 0 20px 0;
-  font-size: 20px;
-  font-weight: 600;
-  color: #1f2937;
+  font-size: 1.25rem;
 }
 
 .info-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: 16px;
 }
 
 .info-item {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  justify-content: space-between;
+  align-items: flex-start;
   padding: 12px;
-  background: #f9fafb;
-  border-radius: 8px;
+  background: #f8fafc;
+  border-radius: 6px;
 }
 
 .info-item .label {
-  font-size: 12px;
-  color: #6b7280;
+  color: #64748b;
+  font-size: 0.9rem;
+  min-width: 200px;
 }
 
 .info-item .value {
-  font-size: 14px;
-  color: #1f2937;
+  color: #1e293b;
+  font-size: 0.9rem;
   word-break: break-all;
+  max-width: 70%;
 }
 
-.info-item .value.hash,
-.info-item .value.address {
-  font-family: monospace;
+.info-item .value.hash {
+  font-family: 'Courier New', monospace;
   color: #3b82f6;
+  cursor: pointer;
 }
 
-.info-item .value.status {
+.info-item .value.hash:hover {
+  text-decoration: underline;
+}
+
+.info-item .value.success {
+  color: #10b981;
   font-weight: 600;
 }
 
-.info-item .value.status.success {
-  color: #10b981;
+.info-item .value.error {
+  color: #ef4444;
+  font-weight: 600;
 }
 
-.info-item .value.status.failed {
-  color: #ef4444}
-
-.info-item .value.status.pending {
-  color: #f59e0b;
+.error {
+  text-align: center;
+  padding: 60px 20px;
+  color: #ef4444;
 }
 
-.input-content {
-  padding: 16px;
-  background: #f9fafb;
-  border-radius: 8px;
-  font-family: monospace;
-  font-size: 12px;
-  color: #374151;
-  word-break: break-all;
-  max-height: 300px;
-  overflow-y: auto;
+.btn-primary {
+  background: #3b82f6;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 6px;
+  cursor: pointer;
+  margin-top: 20px;
+}
+
+.btn-primary:hover {
+  background: #2563eb;
 }
 </style>
