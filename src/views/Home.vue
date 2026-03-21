@@ -216,11 +216,14 @@ const formatEnergy = (num: bigint): string => {
   
   // 处理非常大的数字（万、亿）
   if (value >= 100000000) {
-    return (value / 100000000).toFixed(2) + '亿 J'
+    const formatted = (value / 100000000).toFixed(2)
+    return (formatted.endsWith('.00') ? formatted.slice(0, -3) : formatted) + '亿 J'
   } else if (value >= 10000) {
-    return (value / 10000).toFixed(2) + '万 J'
+    const formatted = (value / 10000).toFixed(2)
+    return (formatted.endsWith('.00') ? formatted.slice(0, -3) : formatted) + '万 J'
   } else {
-    return value.toFixed(2) + ' J'
+    const formatted = value.toFixed(2)
+    return (formatted.endsWith('.00') ? formatted.slice(0, -3) : formatted) + ' J'
   }
 }
 
