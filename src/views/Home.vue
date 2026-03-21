@@ -19,6 +19,11 @@
           <span class="label">最新区块</span>
           <span class="value">#{{ latestBlock.number }}</span>
         </div>
+
+        <div class="uptime" v-if="networkUptime">
+          <span class="label">稳定运行</span>
+          <span class="value">{{ networkUptime }}</span>
+        </div>
       </div>
     </div>
 
@@ -185,6 +190,7 @@ const blocks = ref<Block[]>([])
 const latestBlock = ref<Block | null>(null)
 const loading = ref(false)
 const searchQuery = ref('')
+const networkUptime = ref<string>('')
 
 // Timelock 能量数据
 const timelockCore = ref<TimelockData | null>(null)
@@ -195,11 +201,28 @@ const formatAge = (timestamp: bigint): string => {
   const blockTime = Number(timestamp) * 1000
   const now = Date.now()
   const diff = Math.floor((now - blockTime) / 1000)
-  
+
   if (diff < 60) return `${diff} 秒前`
   if (diff < 3600) return `${Math.floor(diff / 60)} 分钟前`
   if (diff < 86400) return `${Math.floor(diff / 3600)} 小时前`
   return `${Math.floor(diff / 86400)} 天前`
+}
+
+const formatUptime = (genesisTimestamp: number): string => {
+  const now = Math.floor(Date.now() / 1000)
+  const diff = now - genesisTimestamp
+
+  const days = Math.floor(diff / 86400)
+  const hours = Math.floor((diff % 86400) / 3600)
+  const minutes = Math.floor((diff % 3600) / 60)
+
+  if (days > 0) {
+    return `${days}天${hours}小时`
+  } else if (hours > 0) {
+    return `${hours}小时${minutes}分钟`
+  } else {
+    return `${minutes}分钟`
+  }
 }
 
 const formatHash = (hash: string): string => {
@@ -290,7 +313,13 @@ const fetchLatestBlocks = async () => {
   loading.value = true
   try {
     const latest = await client.getBlockNumber()
-    
+
+    // 获取创世区块（block 0）的时间戳
+    const genesisBlock = await client.getBlock({ blockNumber: 0n })
+    if (genesisBlock) {
+      networkUptime.value = formatUptime(Number(genesisBlock.timestamp))
+    }
+
     // 获取最新区块检查网络状态
     const latestBlockData = await client.getBlock({ blockNumber: latest })
     if (latestBlockData) {
@@ -301,13 +330,13 @@ const fetchLatestBlocks = async () => {
         transactions: latestBlockData.transactions,
         gasUsed: latestBlockData.gasUsed,
       }
-      
+
       // 检查网络状态
       const currentTime = Math.floor(Date.now() / 1000)
       const timeDiff = currentTime - Number(latestBlockData.timestamp)
       networkStatus.value = timeDiff < 300 ? 'online' : 'offline' // 5分钟内有新区块则在线
     }
-    
+
     // 获取最近10个区块
     const newBlocks: Block[] = []
     for (let i = 0; i < 10; i++) {
