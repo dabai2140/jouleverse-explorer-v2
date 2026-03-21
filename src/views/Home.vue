@@ -717,6 +717,10 @@ onMounted(() => {
     max-width: 100%;
   }
   
+  .timelock-cards {
+    grid-template-columns: 1fr;
+  }
+  
   .section-header {
     flex-direction: column;
     align-items: flex-start;
