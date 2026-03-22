@@ -122,6 +122,7 @@ import { WJ_ADDRESS, wjABI } from '../contracts/wj'
 
 interface Props {
   address: string
+  blockNumber?: string
 }
 
 const props = defineProps<Props>()
@@ -327,24 +328,37 @@ const jumpToBlock = async () => {
   await loadTransactions(currentPage.value)
 }
 
-onMounted(() => {
+onMounted(async () => {
   if (!isAddress(address.value)) {
     error.value = '无效的地址格式'
     loading.value = false
     return
   }
   
-  Promise.all([
+  // 加载基础数据
+  await Promise.all([
     loadBalance(),
     loadWJBalance(),
-    loadTransactions(1),
-  ]).then(() => {
-    loading.value = false
-  }).catch((err) => {
-    console.error('Failed to load address data:', err)
-    error.value = '加载地址信息失败'
-    loading.value = false
-  })
+  ])
+  
+  // 检查 URL 中是否有 blockNumber 参数
+  if (props.blockNumber) {
+    const targetBlockNum = Number(props.blockNumber)
+    if (!isNaN(targetBlockNum)) {
+      // 先加载一次以获取 maxBlock
+      await loadTransactions(1)
+      
+      // 跳转到指定区块
+      targetBlock.value = String(targetBlockNum)
+      await jumpToBlock()
+    } else {
+      await loadTransactions(1)
+    }
+  } else {
+    await loadTransactions(1)
+  }
+  
+  loading.value = false
 })
 </script>
 

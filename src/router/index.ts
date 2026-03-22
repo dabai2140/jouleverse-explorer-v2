@@ -33,6 +33,12 @@ const routes = [
     name: 'addressDetail',
     component: AddressDetail,
     props: true
+  },
+  {
+    path: '/address/:address/block/:blockNumber',
+    name: 'addressDetailWithBlock',
+    component: AddressDetail,
+    props: true
   }
 ]
 
