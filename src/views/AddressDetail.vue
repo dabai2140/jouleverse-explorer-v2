@@ -232,12 +232,16 @@ const loadTransactions = async (page: number) => {
   try {
     const latestBlock = await client.getBlockNumber()
     maxBlock.value = latestBlock
-    const txDetails: any[] = []
+    
+    // ✅ 清空当前交易列表，准备加载新页面
+    transactions.value = []
     
     // 计算要扫描的区块范围（每页10个区块）
     const blocksPerPage = 10
     const startBlock = latestBlock - BigInt((page - 1) * blocksPerPage)
     const endBlock = latestBlock - BigInt(page * blocksPerPage)
+    
+    let txCount = 0
     
     for (let blockNumber = startBlock; blockNumber > endBlock && blockNumber >= 0n; blockNumber--) {
       const block = await client.getBlock({ blockNumber })
@@ -268,7 +272,8 @@ const loadTransactions = async (page: number) => {
                 // 忽略年龄计算错误
               }
               
-              txDetails.push({
+              // ✅ 渐进式加载：立即添加到交易列表
+              transactions.value.push({
                 hash: txData.hash,
                 from: txData.from,
                 to: txData.to,
@@ -276,6 +281,8 @@ const loadTransactions = async (page: number) => {
                 gasUsed: receipt?.gasUsed || 0n,
                 age: age,
               })
+              
+              txCount++
             }
           } catch (error) {
             // 忽略错误
@@ -284,11 +291,10 @@ const loadTransactions = async (page: number) => {
       }
     }
     
-    totalTxs.value = txDetails.length
+    totalTxs.value = txCount
     totalPages.value = Math.ceil(Number(latestBlock) / blocksPerPage)
     
-    // 显示当前页的所有交易
-    transactions.value = txDetails
+    // 显示当前页的所有交易（已经在循环中渐进添加了）
   } catch (error) {
     console.error('Failed to fetch transactions:', error)
     transactions.value = []
