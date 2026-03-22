@@ -82,7 +82,7 @@
                 <span class="value hash">{{ formatHash(tx.hash) }}</span>
               </div>
               <div class="tx-age">
-                <span class="value">{{ formatAge(tx.blockNumber) }}</span>
+                <span class="value">{{ tx.age }}</span>
               </div>
             </div>
             <div class="tx-details">
@@ -192,25 +192,6 @@ const formatGas = (gas: bigint): string => {
   return formatUnits(gas, 0)
 }
 
-const formatAge = async (blockNumber: bigint): Promise<string> => {
-  try {
-    const block = await client.getBlock({ blockNumber })
-    if (!block) return ''
-    
-    const blockTime = Number(block.timestamp) * 1000
-    const now = Date.now()
-    const diff = Math.floor((now - blockTime) / 1000)
-
-    if (diff < 60) return `${diff} 秒前`
-    if (diff < 3600) return `${Math.floor(diff / 60)} 分钟前`
-    if (diff < 86400) return `${Math.floor(diff / 3600)} 小时前`
-    return `${Math.floor(diff / 86400)} 天前`
-  } catch (error) {
-    console.error('Failed to format age:', error)
-    return ''
-  }
-}
-
 const loadBalance = async () => {
   loadingBalance.value = true
   try {
@@ -269,12 +250,31 @@ const loadTransactions = async (page: number) => {
                 (txData.from.toLowerCase() === address.value.toLowerCase() || 
                  (txData.to && txData.to.toLowerCase() === address.value.toLowerCase()))) {
               const receipt = await client.getTransactionReceipt({ hash: tx as `0x${string}` })
+              
+              // 计算区块年龄
+              let age = ''
+              try {
+                if (block && block.timestamp) {
+                  const blockTime = Number(block.timestamp) * 1000
+                  const now = Date.now()
+                  const diff = Math.floor((now - blockTime) / 1000)
+
+                  if (diff < 60) age = `${diff} 秒前`
+                  else if (diff < 3600) age = `${Math.floor(diff / 60)} 分钟前`
+                  else if (diff < 86400) age = `${Math.floor(diff / 3600)} 小时前`
+                  else age = `${Math.floor(diff / 86400)} 天前`
+                }
+              } catch (error) {
+                // 忽略年龄计算错误
+              }
+              
               txDetails.push({
                 hash: txData.hash,
                 from: txData.from,
                 to: txData.to,
                 blockNumber: txData.blockNumber,
                 gasUsed: receipt?.gasUsed || 0n,
+                age: age,
               })
             }
           } catch (error) {
