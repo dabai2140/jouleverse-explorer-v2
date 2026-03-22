@@ -116,9 +116,12 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { createPublicClient, http, formatEther, isAddress, formatUnits } from 'viem'
 import { mainnet } from 'viem/chains'
 import { WJ_ADDRESS, wjABI } from '../contracts/wj'
+
+const router = useRouter()
 
 interface Props {
   address: string
@@ -326,6 +329,15 @@ const jumpToBlock = async () => {
   
   currentPage.value = Math.max(1, Math.min(page, totalPages.value))
   await loadTransactions(currentPage.value)
+  
+  // 更新 URL
+  router.push({
+    name: 'addressDetailWithBlock',
+    params: {
+      address: props.address,
+      blockNumber: targetBlock.value
+    }
+  })
 }
 
 onMounted(async () => {
