@@ -2,16 +2,10 @@
   <div class="address-detail">
     <div class="header">
       <button @click="$router.push('/')" class="back-btn">← 返回首页</button>
-      <h1 v-if="loading">加载地址信息中...</h1>
-      <h1 v-else-if="error">加载失败</h1>
-      <h1 v-else>地址详情</h1>
+      <h1>地址详情</h1>
     </div>
 
-    <div v-if="loading" class="loading">
-      <p>正在加载地址信息...</p>
-    </div>
-
-    <div v-else-if="error" class="error">
+    <div v-if="error" class="error">
       <p>{{ error }}</p>
       <button @click="$router.push('/')" class="btn-primary">返回首页</button>
     </div>
@@ -26,7 +20,7 @@
           </div>
           <div class="info-item">
             <span class="label">能量余额</span>
-            <span class="value">{{ loadingBalance ? '加载中...' : formatBalance(balance) }} {{ symbol }}</span>
+            <span class="value">{{ loadingBalance ? '⏳ 加载中...' : formatBalance(balance) }} {{ symbol }}</span>
           </div>
         </div>
       </div>
@@ -36,7 +30,7 @@
         <div class="info-grid">
           <div class="info-item">
             <span class="label">wJ 余额</span>
-            <span class="value">{{ loadingWJ ? '加载中...' : formatBalance(wjBalance) }} wJ</span>
+            <span class="value">{{ loadingWJ ? '⏳ 加载中...' : formatBalance(wjBalance) }} wJ</span>
           </div>
           <div class="info-item">
             <span class="label">合约地址</span>
@@ -157,10 +151,9 @@ const client = createPublicClient({
 const address = ref(props.address)
 const balance = ref<bigint | null>(null)
 const wjBalance = ref<bigint | null>(null)
-const loading = ref(true)
 const error = ref<string | null>(null)
 const loadingBalance = ref(true)
-const loadingWJ = ref(false)
+const loadingWJ = ref(true)
 
 // 交易相关
 const transactions = ref<any[]>([])
@@ -349,15 +342,12 @@ const jumpToBlock = async () => {
 onMounted(async () => {
   if (!isAddress(address.value)) {
     error.value = '无效的地址格式'
-    loading.value = false
     return
   }
   
-  // 加载基础数据
-  await Promise.all([
-    loadBalance(),
-    loadWJBalance(),
-  ])
+  // ✅ 渐进式加载：立即开始所有数据加载，不等待
+  loadBalance()
+  loadWJBalance()
   
   // 检查 URL 中是否有 blockNumber 参数
   if (props.blockNumber) {
@@ -375,8 +365,6 @@ onMounted(async () => {
   } else {
     await loadTransactions(1)
   }
-  
-  loading.value = false
 })
 </script>
 
