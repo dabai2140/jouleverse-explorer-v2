@@ -216,7 +216,12 @@ const formatUptime = (genesisTimestamp: number): string => {
   const hours = Math.floor((diff % 86400) / 3600)
   const minutes = Math.floor((diff % 3600) / 60)
 
-  if (days > 0) {
+  const years = Math.floor(days / 365)
+  const remainingDays = days % 365
+
+  if (years > 0) {
+    return `${years}年${remainingDays}天${hours}小时`
+  } else if (days > 0) {
     return `${days}天${hours}小时`
   } else if (hours > 0) {
     return `${hours}小时${minutes}分钟`
