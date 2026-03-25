@@ -24,6 +24,11 @@
           <span class="label">稳定运行</span>
           <span class="value">{{ networkUptime }}</span>
         </div>
+
+        <div class="uptime" v-if="wsConnected">
+          <span class="label">实时推送</span>
+          <span class="value ws-status">✓ 在线</span>
+        </div>
       </div>
     </div>
 
@@ -110,13 +115,14 @@
         <div class="loading" v-if="loading">加载区块数据中...</div>
 
         <div class="blocks-list" v-else-if="blocks.length > 0">
-          <div v-for="(block, index) in blocks" :key="index" class="block-card" @click="$router.push(`/block/${block.number}`)">
+          <div v-for="block in blocks" :key="block.hash" class="block-card" :class="{ 'new-block': block.isNew }" @click="$router.push(`/block/${block.number}`)">
             <div class="block-header">
               <div class="block-number">
                 <span class="label">区块</span>
                 <span class="value">#{{ block.number }}</span>
               </div>
               <div class="block-age">
+                <span v-if="block.isNew" class="new-badge">新</span>
                 <span class="value">{{ formatAge(block.timestamp) }}</span>
               </div>
             </div>
@@ -147,7 +153,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { createPublicClient, http, formatUnits, isAddress } from 'viem'
 import { mainnet } from 'viem/chains'
 import { timelockABI, TIMELOCK_CORE_ADDRESS, TIMELOCK_ECO_ADDRESS } from '../contracts/timelock'
@@ -178,11 +184,12 @@ const client = createPublicClient({
 })
 
 interface Block {
-  number: bigint
+  number: number
   hash: string
-  timestamp: bigint
-  transactions: any[]
+  timestamp: number
+  transactions: string[]
   gasUsed: bigint
+  isNew?: boolean
 }
 
 const networkStatus = ref<'online' | 'offline' | 'unknown'>('unknown')
@@ -191,14 +198,19 @@ const latestBlock = ref<Block | null>(null)
 const loading = ref(false)
 const searchQuery = ref('')
 const networkUptime = ref<string>('')
+const wsConnected = ref(false)
+
+// WebSocket 相关
+let ws: WebSocket | null = null
+let wsSubscriptionId: string | null = null
 
 // Timelock 能量数据
 const timelockCore = ref<TimelockData | null>(null)
 const timelockEco = ref<TimelockData | null>(null)
 const timelockLoading = ref(false)
 
-const formatAge = (timestamp: bigint): string => {
-  const blockTime = Number(timestamp) * 1000
+const formatAge = (timestamp: number): string => {
+  const blockTime = timestamp * 1000
   const now = Date.now()
   const diff = Math.floor((now - blockTime) / 1000)
 
@@ -318,6 +330,7 @@ const fetchLatestBlocks = async () => {
   loading.value = true
   try {
     const latest = await client.getBlockNumber()
+    const latestNumber = Number(latest)
 
     // 获取创世区块（block 0）的时间戳
     const genesisBlock = await client.getBlock({ blockNumber: 0n })
@@ -329,17 +342,17 @@ const fetchLatestBlocks = async () => {
     const latestBlockData = await client.getBlock({ blockNumber: latest })
     if (latestBlockData) {
       latestBlock.value = {
-        number: latestBlockData.number,
+        number: latestNumber,
         hash: latestBlockData.hash || '',
-        timestamp: latestBlockData.timestamp,
-        transactions: latestBlockData.transactions,
+        timestamp: Number(latestBlockData.timestamp),
+        transactions: latestBlockData.transactions as string[],
         gasUsed: latestBlockData.gasUsed,
       }
 
       // 检查网络状态
       const currentTime = Math.floor(Date.now() / 1000)
       const timeDiff = currentTime - Number(latestBlockData.timestamp)
-      networkStatus.value = timeDiff < 300 ? 'online' : 'offline' // 5分钟内有新区块则在线
+      networkStatus.value = timeDiff < 300 ? 'online' : 'offline'
     }
 
     // 获取最近10个区块
@@ -349,10 +362,10 @@ const fetchLatestBlocks = async () => {
       const block = await client.getBlock({ blockNumber })
       if (block) {
         newBlocks.push({
-          number: block.number,
+          number: Number(block.number),
           hash: block.hash || '',
-          timestamp: block.timestamp,
-          transactions: block.transactions,
+          timestamp: Number(block.timestamp),
+          transactions: block.transactions as string[],
           gasUsed: block.gasUsed,
         })
       }
@@ -365,6 +378,106 @@ const fetchLatestBlocks = async () => {
   } finally {
     loading.value = false
   }
+}
+
+// WebSocket 连接和订阅
+const connectWebSocket = () => {
+  try {
+    ws = new WebSocket('wss://rpc.jnsdao.com:8505')
+    
+    ws.onopen = () => {
+      console.log('✅ WebSocket 连接成功')
+      wsConnected.value = true
+      
+      // 订阅新区块
+      const subscribeMsg = {
+        jsonrpc: '2.0',
+        method: 'eth_subscribe',
+        params: ['newHeads'],
+        id: 1
+      }
+      ws?.send(JSON.stringify(subscribeMsg))
+      console.log('📤 发送订阅请求: eth_subscribe newHeads')
+    }
+    
+    ws.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data)
+        
+        // 订阅成功响应
+        if (msg.result && !wsSubscriptionId) {
+          wsSubscriptionId = msg.result
+          console.log('✅ WebSocket 订阅成功，订阅 ID:', wsSubscriptionId)
+        }
+        
+        // 收到新区块推送
+        if (msg.method === 'eth_subscription' && msg.params && msg.params.result) {
+          const blockData = msg.params.result
+          console.log('🎉 收到新区块推送:', blockData.number)
+          
+          handleNewBlock(blockData)
+        }
+      } catch (error) {
+        console.error('解析 WebSocket 消息失败:', error)
+      }
+    }
+    
+    ws.onerror = (error) => {
+      console.error('❌ WebSocket 错误:', error)
+      wsConnected.value = false
+    }
+    
+    ws.onclose = () => {
+      console.log('🔌 WebSocket 连接关闭')
+      wsConnected.value = false
+      wsSubscriptionId = null
+      
+      // 5 秒后尝试重连
+      setTimeout(() => {
+        if (!ws || ws.readyState === WebSocket.CLOSED) {
+          console.log('🔄 尝试重新连接 WebSocket...')
+          connectWebSocket()
+        }
+      }, 5000)
+    }
+  } catch (error) {
+    console.error('创建 WebSocket 连接失败:', error)
+    wsConnected.value = false
+  }
+}
+
+// 处理新区块
+const handleNewBlock = (blockData: any) => {
+  const newBlock: Block = {
+    number: parseInt(blockData.number, 16),
+    hash: blockData.hash,
+    timestamp: parseInt(blockData.timestamp, 16),
+    transactions: blockData.transactions || [],
+    gasUsed: BigInt(blockData.gasUsed || 0),
+    isNew: true
+  }
+  
+  // 更新最新区块
+  latestBlock.value = newBlock
+  
+  // 更新网络状态
+  networkStatus.value = 'online'
+  
+  // 将新区块插入到列表最前面
+  blocks.value.unshift(newBlock)
+  
+  // 保持列表不超过 10 个
+  if (blocks.value.length > 10) {
+    blocks.value = blocks.value.slice(0, 10)
+  }
+  
+  // 3 秒后移除"新"标记
+  setTimeout(() => {
+    const block = blocks.value.find(b => b.hash === newBlock.hash)
+    if (block) {
+      block.isNew = false
+    }
+  }, 3000)
 }
 
 const handleSearch = () => {
@@ -396,8 +509,15 @@ const handleSearch = () => {
 onMounted(() => {
   fetchLatestBlocks()
   fetchAllTimelockData()
-  // 每30秒刷新区块数据
-  setInterval(fetchLatestBlocks, 30000)
+  // 连接 WebSocket 实时订阅
+  connectWebSocket()
+})
+
+onUnmounted(() => {
+  // 关闭 WebSocket 连接
+  if (ws) {
+    ws.close()
+  }
 })
 </script>
 
@@ -763,6 +883,50 @@ onMounted(() => {
   
   .block-details {
     grid-template-columns: 1fr;
+  }
+}
+
+/* WebSocket 状态样式 */
+.ws-status {
+  color: #22c55e;
+}
+
+/* 新区块高亮样式 */
+.new-block {
+  background: #dcfce7 !important;
+  border-color: #22c55e !important;
+  animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateY(-10px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.new-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  margin-right: 6px;
+  background: #22c55e;
+  color: white;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: 4px;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
   }
 }
 </style>
