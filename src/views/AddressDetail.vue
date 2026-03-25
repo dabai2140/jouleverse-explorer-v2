@@ -114,8 +114,10 @@ import { useRouter } from 'vue-router'
 import { createPublicClient, http, formatEther, isAddress, formatUnits } from 'viem'
 import { mainnet } from 'viem/chains'
 import { WJ_ADDRESS, wjABI } from '../contracts/wj'
+// import { useWalletStore } from '../stores/wallet'
 
 const router = useRouter()
+// const walletStore = useWalletStore() // 后续用于 WJ 操作功能
 
 interface Props {
   address: string
