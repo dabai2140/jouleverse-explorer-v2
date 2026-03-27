@@ -40,7 +40,8 @@
         <div class="info-note">
           <p>ℹ️ wJ 是 Joule 的 ERC20 代币包装版本。1 wJ = 1 J，可以自由转账。</p>
         </div>
-      </div>
+      <WJOperations :address="address" :wjBalance="wjBalance" :formatAddress="formatAddress" :formatBalance="formatBalance" />
+</div>
 
       <div class="info-section">
         <h2>📜 交易历史</h2>
@@ -114,6 +115,7 @@ import { useRouter } from 'vue-router'
 import { createPublicClient, http, formatEther, isAddress, formatUnits } from 'viem'
 import { mainnet } from 'viem/chains'
 import { WJ_ADDRESS, wjABI } from '../contracts/wj'
+import WJOperations from './WJOperations.vue'
 // import { useWalletStore } from '../stores/wallet'
 
 const router = useRouter()

@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { createConfig, http } from 'wagmi'
-import { injected } from 'wagmi/connectors'
+import { metaMask } from 'wagmi/connectors'
 import { getPublicClient } from '@wagmi/core'
 
 // Jouleverse chain config
@@ -24,9 +24,9 @@ const jouleverse = {
 // Wagmi config
 export const config = createConfig({
   chains: [jouleverse],
-  connectors: [injected()], // MetaMask
+  connectors: [metaMask()], // MetaMask
   transports: {
-    [jouleverse.id]: http(),
+    [jouleverse.id]: http('https://rpc.jnsdao.com:8503'),
   },
 })
 
