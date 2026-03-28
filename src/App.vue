@@ -40,9 +40,9 @@ onMounted(() => {
         <!-- 钱包连接区域 -->
         <div v-if="walletStore.isConnected" class="wallet-info">
           <div class="wallet-details">
-            <span class="wallet-address">
+            <router-link :to="`/address/${walletStore.address}`" class="wallet-address-link">
               {{ walletStore.formatAddress(walletStore.address) }}
-            </span>
+            </router-link>
             <span class="wallet-balance">
               {{ walletStore.formatBalance(walletStore.balance) }} J
             </span>
@@ -138,19 +138,26 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 4px;
 }
 
-.wallet-address {
+.wallet-address-link {
   font-family: 'Courier New', monospace;
   color: #1e293b;
   font-weight: 600;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.wallet-address-link:hover {
+  color: #3b82f6;
+  text-decoration: underline;
 }
 
 .wallet-balance {
   color: #64748b;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
+  font-weight: 500;
 }
 
 /* Buttons */
@@ -180,7 +187,7 @@ onMounted(() => {
   background: #fef2f2;
   color: #dc2626;
   border: 1px solid #fecaca;
-  padding: 8px 16px;
+  padding: 6px 12px;
   border-radius: 6px;
   cursor: pointer;
   font-weight: 600;

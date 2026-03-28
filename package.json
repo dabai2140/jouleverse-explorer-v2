@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@metamask/connect-evm": "^0.9.0",
     "@wagmi/connectors": "^8.0.0",
     "@wagmi/core": "^3.4.1",
     "ethers": "^6.16.0",
