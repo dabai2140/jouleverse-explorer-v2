@@ -32,7 +32,7 @@ onMounted(() => {
             <circle cx="256" cy="256" r="256" fill="#EB1727"/>
             <path fill="#fefefe" d="M202.4025 130.5h127.195q.2 75-.5 150-5 79.5-82.5 97.5-34.4 6.2-68-3-54.3-18.8-64.5-75.5a133 133 0 0 1-2.5-28h56q3.2 66.9 69 55.5 27-8 33.5-35.5.3-4.3 2-13 .7-49 .5-98a1260 1260 0 0 0-71-1M305.6 226l60 100 60-100"/>
           </svg>
-          <span class="logo-text">Jouleverse Explorer</span>
+          <span class="logo-text">Jscan <span class="beta-tag">V2 Beta</span></span>
         </router-link>
       </div>
 
@@ -110,6 +110,16 @@ onMounted(() => {
   color: #1e293b;
   font-size: 1.25rem;
   font-weight: 700;
+}
+
+.beta-tag {
+  font-size: 0.75rem;
+  font-weight: 500;
+  background: #dbeafe;
+  color: #2563eb;
+  padding: 2px 8px;
+  border-radius: 12px;
+  margin-left: 6px;
 }
 
 .header-right {
