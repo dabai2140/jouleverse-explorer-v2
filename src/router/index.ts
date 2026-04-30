@@ -5,6 +5,7 @@ import TransactionDetail from '../views/TransactionDetail.vue'
 import AddressDetail from '../views/AddressDetail.vue'
 import Home from '../views/Home.vue'
 import WagmiTest from '../views/WagmiTest.vue'
+import JNSQuery from '../views/JNSQuery.vue'
 
 const routes = [
   {
@@ -45,6 +46,11 @@ const routes = [
     path: '/test-wagmi',
     name: 'wagmiTest',
     component: WagmiTest
+  },
+  {
+    path: '/jns',
+    name: 'jnsQuery',
+    component: JNSQuery
   }
 ]
 
