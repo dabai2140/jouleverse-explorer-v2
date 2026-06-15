@@ -162,7 +162,7 @@ const handleCheckIn = async () => {
   checkInError.value = null
 
   try {
-    const { writeContract, switchChain } = await import('wagmi/actions')
+    const { writeContract, switchChain, waitForTransactionReceipt } = await import('wagmi/actions')
     const { config: wagmiConfig } = await import('../stores/wallet')
 
     // 检查并切换到 Jouleverse 链
@@ -183,7 +183,11 @@ const handleCheckIn = async () => {
     })
 
     console.log('[CoreIdCheckIn] Transaction hash:', hash)
-    alert(`签到交易已提交！\n哈希: ${hash}`)
+    alert(`签到交易已提交！\n哈希: ${hash}\n等待链上确认...`)
+
+    // 必须等交易真正上链确认后才能重新读取tokenURI，否则liveness/lastCheckInTime还是旧值
+    await waitForTransactionReceipt(wagmiConfig, { hash })
+    console.log('[CoreIdCheckIn] Transaction confirmed')
 
     now.value = Math.floor(Date.now() / 1000)
     emit('checkedIn')
