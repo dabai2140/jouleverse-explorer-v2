@@ -77,8 +77,11 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { createPublicClient, http, formatUnits } from 'viem'
 import { mainnet } from 'viem/chains'
+
+const router = useRouter()
 
 const jouleverse = {
   ...mainnet,
@@ -142,7 +145,7 @@ const formatNumber = (num: bigint): string => {
 const goToBlock = () => {
   const blockNum = parseInt(searchBlockNumber.value)
   if (!isNaN(blockNum) && blockNum > 0) {
-    window.location.href = `/block/${blockNum}`
+    router.push(`/block/${blockNum}`)
   }
 }
 

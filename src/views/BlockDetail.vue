@@ -92,8 +92,11 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { createPublicClient, http, formatUnits } from 'viem'
 import { mainnet } from 'viem/chains'
+
+const router = useRouter()
 
 interface Props {
   number: string
@@ -157,7 +160,7 @@ const calculateGasUsed = (used: bigint, limit: bigint): number => {
 }
 
 const viewTransaction = (txHash: string) => {
-  window.location.href = `/tx/${txHash}`
+  router.push(`/tx/${txHash}`)
 }
 
 const loadBlock = async () => {

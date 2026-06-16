@@ -154,10 +154,13 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { createPublicClient, http, formatUnits, isAddress } from 'viem'
 import { mainnet } from 'viem/chains'
 import { timelockABI, TIMELOCK_CORE_ADDRESS, TIMELOCK_ECO_ADDRESS } from '../contracts/timelock'
 import type { TimelockData } from '../contracts/timelock'
+
+const router = useRouter()
 
 const jouleverse = {
   ...mainnet,
@@ -483,27 +486,27 @@ const handleNewBlock = (blockData: any) => {
 const handleSearch = () => {
   const query = searchQuery.value.trim()
   if (!query) return
-  
+
   // 检查是否为区块号
   if (/^\d+$/.test(query)) {
-    window.location.href = `/block/${query}`
+    router.push(`/block/${query}`)
     return
   }
-  
+
   // 检查是否为地址（以太坊地址格式）
   if (isAddress(query)) {
-    window.location.href = `/address/${query}`
+    router.push(`/address/${query}`)
     return
   }
-  
+
   // 检查是否为交易哈希
   if (query.length === 66 && query.startsWith('0x')) {
-    window.location.href = `/tx/${query}`
+    router.push(`/tx/${query}`)
     return
   }
-  
+
   // 默认尝试作为区块号
-  window.location.href = `/block/${query}`
+  router.push(`/block/${query}`)
 }
 
 onMounted(() => {
