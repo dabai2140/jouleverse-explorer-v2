@@ -34,7 +34,7 @@
             v-for="entry in popHistory"
             :key="entry.tokenId.toString()"
             class="pop-badge"
-            :style="{ backgroundColor: entry.isValid ? 'initial' : 'gray' }"
+            :class="{ invalid: !entry.isValid }"
           >
             <img :src="entry.metadata?.image" :alt="entry.metadata?.name" class="pop-badge-img" />
             <div class="pop-month">{{ entry.monthLabel }}</div>
@@ -170,5 +170,13 @@ onMounted(() => {
 .pop-month {
   font-size: 0.75rem;
   color: #64748b;
+}
+
+.pop-badge.invalid {
+  opacity: 0.4;
+}
+
+.pop-badge.invalid .pop-badge-img {
+  filter: grayscale(1);
 }
 </style>

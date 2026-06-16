@@ -42,6 +42,7 @@
       <button @click="handleCheckIn" :disabled="loadingCheckIn || !canCheckIn" class="btn-primary">
         {{ checkInButtonText }}
       </button>
+      <p v-if="checkInStatus" class="status-message">{{ checkInStatus }}</p>
       <p v-if="checkInError" class="error-message">{{ checkInError }}</p>
     </div>
   </div>
@@ -49,10 +50,12 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { createPublicClient, http } from 'viem'
 import { useWalletStore } from '../stores/wallet'
 import { jouleverseChain } from '../config/chain'
+import { publicClient } from '../config/client'
 import { JVCORE_ADDRESS, jvcoreABI } from '../contracts/jvcore'
+import { writeContract, switchChain, waitForTransactionReceipt } from 'wagmi/actions'
+import { config as wagmiConfig } from '../stores/wallet'
 import type { NFTMetadata } from '../types/coreid'
 
 interface Props {
@@ -66,14 +69,13 @@ const props = defineProps<Props>()
 const emit = defineEmits<{ checkedIn: [] }>()
 const walletStore = useWalletStore()
 
-const client = createPublicClient({ chain: jouleverseChain, transport: http() })
-
 const minCheckInInterval = ref(0n)
 const expireDuration = ref(0n)
 const now = ref(Math.floor(Date.now() / 1000))
 
 const loadingCheckIn = ref(false)
 const checkInError = ref<string | null>(null)
+const checkInStatus = ref<string | null>(null)
 
 // 最安全的错误处理函数（同 WJOperations.vue）
 const safeErrorMessage = (error: unknown): string => {
@@ -134,12 +136,12 @@ const formatDuration = (seconds: number | bigint): string => {
 const loadCheckInParams = async () => {
   try {
     const [interval, expire] = await Promise.all([
-      client.readContract({
+      publicClient.readContract({
         address: JVCORE_ADDRESS,
         abi: jvcoreABI,
         functionName: 'minCheckInInterval',
       }),
-      client.readContract({
+      publicClient.readContract({
         address: JVCORE_ADDRESS,
         abi: jvcoreABI,
         functionName: 'expireDuration',
@@ -160,15 +162,13 @@ const handleCheckIn = async () => {
 
   loadingCheckIn.value = true
   checkInError.value = null
+  checkInStatus.value = null
 
   try {
-    const { writeContract, switchChain, waitForTransactionReceipt } = await import('wagmi/actions')
-    const { config: wagmiConfig } = await import('../stores/wallet')
-
     // 检查并切换到 Jouleverse 链
     console.log('[CoreIdCheckIn] Switching to Jouleverse...')
     try {
-      await switchChain(wagmiConfig, { chainId: 3666 })
+      await switchChain(wagmiConfig, { chainId: jouleverseChain.id })
       console.log('[CoreIdCheckIn] Switched to Jouleverse')
     } catch (err) {
       console.log('[CoreIdCheckIn] Switch chain error (might already be on correct chain):', err)
@@ -183,12 +183,13 @@ const handleCheckIn = async () => {
     })
 
     console.log('[CoreIdCheckIn] Transaction hash:', hash)
-    alert(`签到交易已提交！\n哈希: ${hash}\n等待链上确认...`)
+    checkInStatus.value = `交易已提交，等待链上确认... (${hash.slice(0, 10)}...)`
 
     // 必须等交易真正上链确认后才能重新读取tokenURI，否则liveness/lastCheckInTime还是旧值
     await waitForTransactionReceipt(wagmiConfig, { hash })
     console.log('[CoreIdCheckIn] Transaction confirmed')
 
+    checkInStatus.value = '签到成功！状态已更新。'
     now.value = Math.floor(Date.now() / 1000)
     emit('checkedIn')
   } catch (error) {
@@ -329,6 +330,12 @@ onMounted(() => {
 .btn-primary:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.status-message {
+  color: #15803d;
+  font-size: 0.85rem;
+  margin: 8px 0 0 0;
 }
 
 .error-message {
