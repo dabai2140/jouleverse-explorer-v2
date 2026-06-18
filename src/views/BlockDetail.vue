@@ -92,38 +92,14 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { createPublicClient, http, formatUnits } from 'viem'
-import { mainnet } from 'viem/chains'
+import { formatUnits } from 'viem'
+import { publicClient } from '../config/client'
 
 interface Props {
   number: string
 }
 
 const props = defineProps<Props>()
-
-const jouleverse = {
-  ...mainnet,
-  id: 3666,
-  name: 'Jouleverse',
-  nativeCurrency: {
-    name: 'Joule',
-    symbol: 'J',
-    decimals: 18,
-  },
-  rpcUrls: {
-    default: {
-      http: ['https://rpc.jnsdao.com:8503'],
-    },
-  },
-  blockExplorers: {
-    default: { name: 'JScan', url: 'https://jscan.jnsdao.com' },
-  },
-}
-
-const client = createPublicClient({
-  chain: jouleverse,
-  transport: http(),
-})
 
 const block = ref<any>(null)
 const loading = ref(true)
@@ -164,7 +140,7 @@ const loadBlock = async () => {
   loading.value = true
   try {
     const blockNum = BigInt(props.number)
-    const blockData = await client.getBlock({
+    const blockData = await publicClient.getBlock({
       blockNumber: blockNum,
       includeTransactions: true,
     })

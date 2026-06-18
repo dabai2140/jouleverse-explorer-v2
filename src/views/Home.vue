@@ -154,34 +154,10 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
-import { createPublicClient, http, formatUnits, isAddress } from 'viem'
-import { mainnet } from 'viem/chains'
+import { formatUnits, isAddress } from 'viem'
 import { timelockABI, TIMELOCK_CORE_ADDRESS, TIMELOCK_ECO_ADDRESS } from '../contracts/timelock'
 import type { TimelockData } from '../contracts/timelock'
-
-const jouleverse = {
-  ...mainnet,
-  id: 3666,
-  name: 'Jouleverse',
-  nativeCurrency: {
-    name: 'Joule',
-    symbol: 'J',
-    decimals: 18,
-  },
-  rpcUrls: {
-    default: {
-      http: ['https://rpc.jnsdao.com:8503'],
-    },
-  },
-  blockExplorers: {
-    default: { name: 'JScan', url: 'https://jscan.jnsdao.com' },
-  },
-}
-
-const client = createPublicClient({
-  chain: jouleverse,
-  transport: http(),
-})
+import { publicClient } from '../config/client'
 
 interface Block {
   number: number
@@ -270,27 +246,27 @@ const formatEnergy = (num: bigint): string => {
 const fetchTimelockData = async (address: string) => {
   try {
     const [monthlyBudget, monthlyBlocks, used, released, available] = await Promise.all([
-      client.readContract({
+      publicClient.readContract({
         address: address as `0x${string}`,
         abi: timelockABI,
         functionName: 'MONTHLY_BUDGET',
       }),
-      client.readContract({
+      publicClient.readContract({
         address: address as `0x${string}`,
         abi: timelockABI,
         functionName: 'MONTHLY_BLOCKS',
       }),
-      client.readContract({
+      publicClient.readContract({
         address: address as `0x${string}`,
         abi: timelockABI,
         functionName: 'used',
       }),
-      client.readContract({
+      publicClient.readContract({
         address: address as `0x${string}`,
         abi: timelockABI,
         functionName: 'released',
       }),
-      client.readContract({
+      publicClient.readContract({
         address: address as `0x${string}`,
         abi: timelockABI,
         functionName: 'available',
@@ -329,17 +305,17 @@ const fetchAllTimelockData = async () => {
 const fetchLatestBlocks = async () => {
   loading.value = true
   try {
-    const latest = await client.getBlockNumber()
+    const latest = await publicClient.getBlockNumber()
     const latestNumber = Number(latest)
 
     // 获取创世区块（block 0）的时间戳
-    const genesisBlock = await client.getBlock({ blockNumber: 0n })
+    const genesisBlock = await publicClient.getBlock({ blockNumber: 0n })
     if (genesisBlock) {
       networkUptime.value = formatUptime(Number(genesisBlock.timestamp))
     }
 
     // 获取最新区块检查网络状态
-    const latestBlockData = await client.getBlock({ blockNumber: latest })
+    const latestBlockData = await publicClient.getBlock({ blockNumber: latest })
     if (latestBlockData) {
       latestBlock.value = {
         number: latestNumber,
@@ -359,7 +335,7 @@ const fetchLatestBlocks = async () => {
     const newBlocks: Block[] = []
     for (let i = 0; i < 10; i++) {
       const blockNumber = latest - BigInt(i)
-      const block = await client.getBlock({ blockNumber })
+      const block = await publicClient.getBlock({ blockNumber })
       if (block) {
         newBlocks.push({
           number: Number(block.number),

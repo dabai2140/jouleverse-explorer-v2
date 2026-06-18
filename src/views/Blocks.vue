@@ -77,32 +77,8 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { createPublicClient, http, formatUnits } from 'viem'
-import { mainnet } from 'viem/chains'
-
-const jouleverse = {
-  ...mainnet,
-  id: 3666,
-  name: 'Jouleverse',
-  nativeCurrency: {
-    name: 'Joule',
-    symbol: 'J',
-    decimals: 18,
-  },
-  rpcUrls: {
-    default: {
-      http: ['https://rpc.jnsdao.com:8503'],
-    },
-  },
-  blockExplorers: {
-    default: { name: 'JScan', url: 'https://jscan.jnsdao.com' },
-  },
-}
-
-const client = createPublicClient({
-  chain: jouleverse,
-  transport: http(),
-})
+import { formatUnits } from 'viem'
+import { publicClient } from '../config/client'
 
 interface Block {
   number: bigint
@@ -153,7 +129,7 @@ const refreshBlocks = async () => {
 const loadPage = async (page: number) => {
   loading.value = true
   try {
-    const latestBlock = await client.getBlockNumber()
+    const latestBlock = await publicClient.getBlockNumber()
     const startBlock = latestBlock - BigInt((page - 1) * pageSize)
     
     const newBlocks: Block[] = []
@@ -161,7 +137,7 @@ const loadPage = async (page: number) => {
       const blockNumber = startBlock - BigInt(i)
       if (blockNumber < 0n) break
       
-      const block = await client.getBlock({
+      const block = await publicClient.getBlock({
         blockNumber,
       })
       newBlocks.push({

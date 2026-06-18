@@ -4,7 +4,6 @@ import BlockDetail from '../views/BlockDetail.vue'
 import TransactionDetail from '../views/TransactionDetail.vue'
 import AddressDetail from '../views/AddressDetail.vue'
 import Home from '../views/Home.vue'
-import WagmiTest from '../views/WagmiTest.vue'
 
 const routes = [
   {
@@ -41,11 +40,6 @@ const routes = [
     component: AddressDetail,
     props: true
   },
-  {
-    path: '/test-wagmi',
-    name: 'wagmiTest',
-    component: WagmiTest
-  }
 ]
 
 const router = createRouter({

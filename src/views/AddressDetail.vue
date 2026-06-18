@@ -112,10 +112,10 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { createPublicClient, http, formatEther, isAddress, formatUnits } from 'viem'
-import { mainnet } from 'viem/chains'
+import { formatEther, isAddress, formatUnits } from 'viem'
 import { WJ_ADDRESS, wjABI } from '../contracts/wj'
 import WJOperations from './WJOperations.vue'
+import { publicClient } from '../config/client'
 // import { useWalletStore } from '../stores/wallet'
 
 const router = useRouter()
@@ -127,30 +127,6 @@ interface Props {
 }
 
 const props = defineProps<Props>()
-
-const jouleverse = {
-  ...mainnet,
-  id: 3666,
-  name: 'Jouleverse',
-  nativeCurrency: {
-    name: 'Joule',
-    symbol: 'J',
-    decimals: 18,
-  },
-  rpcUrls: {
-    default: {
-      http: ['https://rpc.jnsdao.com:8503'],
-    },
-  },
-  blockExplorers: {
-    default: { name: 'JScan', url: 'https://jscan.jnsdao.com' },
-  },
-}
-
-const client = createPublicClient({
-  chain: jouleverse,
-  transport: http(),
-})
 
 const address = ref(props.address)
 const balance = ref<bigint | null>(null)
@@ -192,7 +168,7 @@ const formatGas = (gas: bigint): string => {
 const loadBalance = async () => {
   loadingBalance.value = true
   try {
-    const balanceData = await client.getBalance({
+    const balanceData = await publicClient.getBalance({
       address: address.value as `0x${string}`,
     })
     balance.value = balanceData
@@ -208,7 +184,7 @@ const loadBalance = async () => {
 const loadWJBalance = async () => {
   loadingWJ.value = true
   try {
-    const balanceData = await client.readContract({
+    const balanceData = await publicClient.readContract({
       address: WJ_ADDRESS,
       abi: wjABI,
       functionName: 'balanceOf',
@@ -227,7 +203,7 @@ const loadWJBalance = async () => {
 const loadTransactions = async (page: number) => {
   loadingTxs.value = true
   try {
-    const latestBlock = await client.getBlockNumber()
+    const latestBlock = await publicClient.getBlockNumber()
     maxBlock.value = latestBlock
     
     // ✅ 清空当前交易列表，准备加载新页面
@@ -241,16 +217,16 @@ const loadTransactions = async (page: number) => {
     let txCount = 0
     
     for (let blockNumber = startBlock; blockNumber > endBlock && blockNumber >= 0n; blockNumber--) {
-      const block = await client.getBlock({ blockNumber })
+      const block = await publicClient.getBlock({ blockNumber })
       
       if (block && block.transactions.length > 0) {
         for (const tx of block.transactions) {
           try {
-            const txData = await client.getTransaction({ hash: tx as `0x${string}` })
+            const txData = await publicClient.getTransaction({ hash: tx as `0x${string}` })
             if (txData && 
                 (txData.from.toLowerCase() === address.value.toLowerCase() || 
                  (txData.to && txData.to.toLowerCase() === address.value.toLowerCase()))) {
-              const receipt = await client.getTransactionReceipt({ hash: tx as `0x${string}` })
+              const receipt = await publicClient.getTransactionReceipt({ hash: tx as `0x${string}` })
               
               // 计算区块年龄
               let age = ''
