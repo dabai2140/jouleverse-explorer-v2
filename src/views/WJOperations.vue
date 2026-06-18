@@ -45,6 +45,7 @@
         <button @click="handleWithdraw" :disabled="loadingOperation || !withdrawForm.to || !withdrawForm.amount" class="btn-primary">
           {{ loadingOperation ? '处理中...' : '释放 J' }}
         </button>
+        <p v-if="operationSuccess" class="success-message">{{ operationSuccess }}</p>
         <p v-if="operationError" class="error-message">{{ operationError }}</p>
       </div>
 
@@ -69,6 +70,7 @@
         <button @click="handleTransfer" :disabled="loadingOperation || !transferForm.to || !transferForm.amount" class="btn-primary">
           {{ loadingOperation ? '处理中...' : '转账' }}
         </button>
+        <p v-if="operationSuccess" class="success-message">{{ operationSuccess }}</p>
         <p v-if="operationError" class="error-message">{{ operationError }}</p>
       </div>
     </div>
@@ -80,6 +82,7 @@ import { ref } from 'vue'
 import { parseEther } from 'viem'
 import { useWalletStore } from '../stores/wallet'
 import { WJ_ADDRESS, wjABI } from '../contracts/wj'
+import { jouleverseChain } from '../config/chain'
 
 interface Props {
   address: string
@@ -94,58 +97,33 @@ const walletStore = useWalletStore()
 const activeTab = ref<'withdraw' | 'transfer'>('withdraw')
 const loadingOperation = ref(false)
 const operationError = ref<string | null>(null)
+const operationSuccess = ref<string | null>(null)
 const withdrawForm = ref({ to: '', amount: '' })
 const transferForm = ref({ to: '', amount: '' })
 
-// 最安全的错误处理函数
 const safeErrorMessage = (error: unknown): string => {
   try {
-    if (error === null || error === undefined) {
-      return 'Unknown error'
-    }
-
-    if (typeof error === 'string') {
-      return error
-    }
-
+    if (error === null || error === undefined) return 'Unknown error'
+    if (typeof error === 'string') return error
     if (typeof error === 'object') {
-      // 检查是否有 message 属性
       if ('message' in error && typeof (error as any).message === 'string') {
         return (error as any).message
       }
-
-      // 检查是否有 toString 方法
       if ('toString' in error && typeof (error as any).toString === 'function') {
-        try {
-          return (error as any).toString()
-        } catch {
-          return 'Could not convert error to string'
-        }
+        try { return (error as any).toString() } catch { return 'Could not convert error to string' }
       }
     }
-
-    // 最后尝试 String()
     return String(error)
   } catch {
     return 'Could not parse error'
   }
 }
 
-// 处理数量输入，确保只允许正数
 const handleAmountInput = (type: 'withdraw' | 'transfer', event: Event) => {
   const target = event.target as HTMLInputElement
-  let value = target.value
-
-  // 移除非数字字符（除了小数点）
-  value = value.replace(/[^\d.]/g, '')
-
-  // 确保只有一个小数点
+  let value = target.value.replace(/[^\d.]/g, '')
   const parts = value.split('.')
-  if (parts.length > 2) {
-    value = parts[0] + '.' + parts.slice(1).join('')
-  }
-
-  // 更新值
+  if (parts.length > 2) value = parts[0] + '.' + parts.slice(1).join('')
   if (type === 'withdraw') {
     withdrawForm.value.amount = value
   } else {
@@ -161,47 +139,27 @@ const handleWithdraw = async () => {
 
   loadingOperation.value = true
   operationError.value = null
+  operationSuccess.value = null
 
   try {
     const to = withdrawForm.value.to
-    console.log('[WJOperations] withdrawForm.value:', JSON.stringify(withdrawForm.value))
-    console.log('[WJOperations] withdrawForm.value.amount:', withdrawForm.value.amount)
-    console.log('[WJOperations] withdrawForm.value.amount type:', typeof withdrawForm.value.amount)
-    console.log('[WJOperations] withdrawForm.value.amount == null:', withdrawForm.value.amount == null)
-    console.log('[WJOperations] withdrawForm.value.amount == undefined:', withdrawForm.value.amount == undefined)
-
     const amountStr = String(withdrawForm.value.amount || '0')
-    console.log('[WJOperations] amountStr1:', amountStr)
-    console.log('[WJOperations] amountStr type:', typeof amountStr)
-    console.log('[WJOperations] amountStr length:', amountStr.length)
-    console.log('[WJOperations] amountStr char codes:', amountStr.split('').map(c => c.charCodeAt(0)))
 
-    // 检查 amountStr 是否是有效的正数
     if (!/^\d*\.?\d+$/.test(amountStr) && amountStr !== '0') {
       throw new Error(`无效的数量: "${amountStr}"，请输入正数`)
     }
 
     const amount = parseEther(amountStr)
 
-    console.log('[WJOperations] Starting withdraw...')
-    console.log('[WJOperations] to:', to)
-    console.log('[WJOperations] amount (bigint):', amount)
-    console.log('[WJOperations] as number:', Number(amount))
-    console.log('[WJOperations] amount < 0:', amount < 0n)
-
     const { writeContract, switchChain } = await import('wagmi/actions')
     const { config: wagmiConfig } = await import('../stores/wallet')
 
-    // 检查并切换到 Jouleverse 链
-    console.log('[WJOperations] Switching to Jouleverse...')
     try {
-      await switchChain(wagmiConfig, { chainId: 3666 })
-      console.log('[WJOperations] Switched to Jouleverse')
-    } catch (err) {
-      console.log('[WJOperations] Switch chain error (might already be on correct chain):', err)
+      await switchChain(wagmiConfig, { chainId: jouleverseChain.id })
+    } catch {
+      // 已在正确链上时 switchChain 会报错，忽略
     }
 
-    console.log('[WJOperations] Calling writeContract...')
     const hash = await writeContract(wagmiConfig, {
       address: WJ_ADDRESS,
       abi: wjABI,
@@ -209,16 +167,12 @@ const handleWithdraw = async () => {
       args: [to as `0x${string}`, amount],
     })
 
-    console.log('[WJOperations] Transaction hash:', hash)
-    alert(`释放 J 交易已提交！\n哈希: ${hash}`)
-
+    operationSuccess.value = `释放 J 交易已提交！哈希: ${hash.slice(0, 10)}...`
     await walletStore.refreshBalances()
     withdrawForm.value = { to: '', amount: '' }
   } catch (error) {
     console.error('[WJOperations] Withdraw failed:', error)
-    const errMessage = safeErrorMessage(error)
-    console.error('[WJOperations] Error message:', errMessage)
-    operationError.value = '释放 J 失败: ' + errMessage
+    operationError.value = '释放 J 失败: ' + safeErrorMessage(error)
   } finally {
     loadingOperation.value = false
   }
@@ -232,47 +186,27 @@ const handleTransfer = async () => {
 
   loadingOperation.value = true
   operationError.value = null
+  operationSuccess.value = null
 
   try {
     const to = transferForm.value.to
-    console.log('[WJOperations] transferForm.value:', JSON.stringify(transferForm.value))
-    console.log('[WJOperations] transferForm.value.amount:', transferForm.value.amount)
-    console.log('[WJOperations] transferForm.value.amount type:', typeof transferForm.value.amount)
-    console.log('[WJOperations] transferForm.value.amount == null:', transferForm.value.amount == null)
-    console.log('[WJOperations] transferForm.value.amount == undefined:', transferForm.value.amount == undefined)
-
     const amountStr = String(transferForm.value.amount || '0')
-    console.log('[WJOperations] amountStr:', amountStr)
-    console.log('[WJOperations] amountStr type:', typeof amountStr)
-    console.log('[WJOperations] amountStr length:', amountStr.length)
-    console.log('[WJOperations] amountStr char codes:', amountStr.split('').map(c => c.charCodeAt(0)))
 
-    // 检查 amountStr 是否是有效的正数
     if (!/^\d*\.?\d+$/.test(amountStr) && amountStr !== '0') {
       throw new Error(`无效的数量: "${amountStr}"，请输入正数`)
     }
 
     const amount = parseEther(amountStr)
 
-    console.log('[WJOperations] Starting transfer...')
-    console.log('[WJOperations] to:', to)
-    console.log('[WJOperations] amount (bigint):', amount)
-    console.log('[WJOperations] amount as number:', Number(amount))
-    console.log('[WJOperations] amount < 0:', amount < 0n)
-
     const { writeContract, switchChain } = await import('wagmi/actions')
     const { config: wagmiConfig } = await import('../stores/wallet')
 
-    // 检查并切换到 Jouleverse 链
-    console.log('[WJOperations] Switching to Jouleverse...')
     try {
-      await switchChain(wagmiConfig, { chainId: 3666 })
-      console.log('[WJOperations] Switched to Jouleverse')
-    } catch (err) {
-      console.log('[WJOperations] Switch chain error (might already be on correct chain):', err)
+      await switchChain(wagmiConfig, { chainId: jouleverseChain.id })
+    } catch {
+      // 已在正确链上时 switchChain 会报错，忽略
     }
 
-    console.log('[WJOperations] Calling writeContract...')
     const hash = await writeContract(wagmiConfig, {
       address: WJ_ADDRESS,
       abi: wjABI,
@@ -280,16 +214,12 @@ const handleTransfer = async () => {
       args: [to as `0x${string}`, amount],
     })
 
-    console.log('[WJOperations] Transaction hash:', hash)
-    alert(`转账交易已提交！\n哈希: ${hash}`)
-
+    operationSuccess.value = `转账交易已提交！哈希: ${hash.slice(0, 10)}...`
     await walletStore.refreshBalances()
     transferForm.value = { to: '', amount: '' }
   } catch (error) {
     console.error('[WJOperations] Transfer failed:', error)
-    const errMessage = safeErrorMessage(error)
-    console.error('[WJOperations] Error message:', errMessage)
-    operationError.value = '转账失败: ' + errMessage
+    operationError.value = '转账失败: ' + safeErrorMessage(error)
   } finally {
     loadingOperation.value = false
   }
@@ -455,6 +385,12 @@ const handleTransfer = async () => {
 .btn-primary:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.success-message {
+  color: #15803d;
+  font-size: 0.85rem;
+  margin: 0;
 }
 
 .error-message {

@@ -77,8 +77,11 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { formatUnits } from 'viem'
 import { publicClient } from '../config/client'
+
+const router = useRouter()
 
 interface Block {
   number: bigint
@@ -118,7 +121,7 @@ const formatNumber = (num: bigint): string => {
 const goToBlock = () => {
   const blockNum = parseInt(searchBlockNumber.value)
   if (!isNaN(blockNum) && blockNum > 0) {
-    window.location.href = `/block/${blockNum}`
+    router.push(`/block/${blockNum}`)
   }
 }
 

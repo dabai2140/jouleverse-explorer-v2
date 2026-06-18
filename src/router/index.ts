@@ -1,4 +1,4 @@
-import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createWebHashHistory } from 'vue-router'
 import Blocks from '../views/Blocks.vue'
 import BlockDetail from '../views/BlockDetail.vue'
 import TransactionDetail from '../views/TransactionDetail.vue'
@@ -43,7 +43,7 @@ const routes = [
 ]
 
 const router = createRouter({
-  history: createWebHistory('/'),
+  history: createWebHashHistory(),
   routes
 })
 

@@ -44,6 +44,11 @@
 </div>
 
       <div class="info-section">
+        <h2>🆔 Core ID 与签到</h2>
+        <CoreIdSection :address="address" :formatAddress="formatAddress" />
+      </div>
+
+      <div class="info-section">
         <h2>📜 交易历史</h2>
         <div class="transactions-header">
           <span>显示第 {{ currentPage }} 页（每页10个区块）</span>
@@ -115,6 +120,7 @@ import { useRouter } from 'vue-router'
 import { formatEther, isAddress, formatUnits } from 'viem'
 import { WJ_ADDRESS, wjABI } from '../contracts/wj'
 import WJOperations from './WJOperations.vue'
+import CoreIdSection from './CoreIdSection.vue'
 import { publicClient } from '../config/client'
 // import { useWalletStore } from '../stores/wallet'
 
