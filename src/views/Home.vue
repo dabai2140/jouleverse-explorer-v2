@@ -39,10 +39,14 @@
           <input
             v-model="searchQuery"
             @keyup.enter="handleSearch"
-            placeholder="搜索区块、交易或地址..."
+            placeholder="搜索区块、交易、地址或 JNS 域名..."
             class="search-input"
           >
           <button @click="handleSearch" class="search-btn">🔍 搜索</button>
+        </div>
+        <div class="search-hints">
+          <span>快速链接：</span>
+          <a href="/jns" class="quick-link">JNS 域名查询</a>
         </div>
       </div>
 
@@ -464,6 +468,12 @@ const handleSearch = () => {
   const query = searchQuery.value.trim()
   if (!query) return
 
+  // 检查是否为 JNS 域名
+  if (query.toLowerCase().endsWith('.j')) {
+    router.push(`/jns?domain=${query}`)
+    return
+  }
+
   // 检查是否为区块号
   if (/^\d+$/.test(query)) {
     router.push(`/block/${query}`)
@@ -638,6 +648,22 @@ onUnmounted(() => {
 .search-btn:hover {
   background: #2563eb;
   transform: translateY(-1px);
+}
+
+.search-hints {
+  margin-top: 12px;
+  font-size: 0.85rem;
+  color: #64748b;
+}
+
+.search-hints .quick-link {
+  color: #3b82f6;
+  text-decoration: none;
+  margin-left: 8px;
+}
+
+.search-hints .quick-link:hover {
+  text-decoration: underline;
 }
 
 .timelock-info {
