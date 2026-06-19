@@ -1,4 +1,4 @@
-import { ref } from 'vue'
+import { ref, unref } from 'vue'
 import { isAddress } from 'viem'
 import { publicClient } from '../config/client'
 import { JVCORE_ADDRESS, jvcoreABI } from '../contracts/jvcore'
@@ -7,6 +7,7 @@ import { parseTokenURI } from '../utils/nftMetadata'
 import type { CoreIdInfo, PopHistoryEntry } from '../types/coreid'
 
 export function useCoreId(address: string) {
+  const addr = unref(address)
   const coreIds = ref<CoreIdInfo[]>([])
   const popHistory = ref<PopHistoryEntry[]>([])
   const isLoading = ref(false)
@@ -14,12 +15,11 @@ export function useCoreId(address: string) {
 
   // 我的Core ID：port自 v1 getAllJVCore（addressInfoController.js 第808-843行）
   const loadMyCoreIds = async () => {
-    const addr = address as `0x${string}`
     const balance = await publicClient.readContract({
       address: JVCORE_ADDRESS,
       abi: jvcoreABI,
       functionName: 'balanceOf',
-      args: [addr],
+      args: [addr as `0x${string}`],
     })
 
     const indices = Array.from({ length: Number(balance) }, (_, i) => BigInt(i))
@@ -29,7 +29,7 @@ export function useCoreId(address: string) {
           address: JVCORE_ADDRESS,
           abi: jvcoreABI,
           functionName: 'tokenOfOwnerByIndex',
-          args: [addr, i],
+          args: [addr as `0x${string}`, i],
         })
       )
     )
@@ -49,7 +49,6 @@ export function useCoreId(address: string) {
 
   // 我的POP签到历史：port自 v1 getAllPOP（addressInfoController.js 第845-891行）
   const loadMyPopHistory = async () => {
-    const addr = address as `0x${string}`
     // 当前地址自己的Core ID，用于"代打卡"判断；地址本身没有Core ID则全部置灰
     const coreId = coreIds.value.length > 0 ? coreIds.value[0].tokenId : null
 
@@ -57,7 +56,7 @@ export function useCoreId(address: string) {
       address: POPBADGE_ADDRESS,
       abi: popbadgeABI,
       functionName: 'balanceOf',
-      args: [addr],
+      args: [addr as `0x${string}`],
     })
 
     const indices = Array.from({ length: Number(balance) }, (_, i) => BigInt(i))
@@ -67,7 +66,7 @@ export function useCoreId(address: string) {
           address: POPBADGE_ADDRESS,
           abi: popbadgeABI,
           functionName: 'tokenOfOwnerByIndex',
-          args: [addr, i],
+          args: [addr as `0x${string}`, i],
         })
       )
     )
@@ -105,7 +104,7 @@ export function useCoreId(address: string) {
   }
 
   const load = async () => {
-    if (!isAddress(address)) {
+    if (!isAddress(addr)) {
       error.value = '地址格式无效'
       return
     }

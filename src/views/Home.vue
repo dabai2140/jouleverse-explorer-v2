@@ -159,6 +159,7 @@ import { formatUnits, isAddress } from 'viem'
 import { timelockABI, TIMELOCK_CORE_ADDRESS, TIMELOCK_ECO_ADDRESS } from '../contracts/timelock'
 import type { TimelockData } from '../contracts/timelock'
 import { publicClient } from '../config/client'
+import { detectAddressFormat } from '../utils/jvaddress'
 
 const router = useRouter()
 
@@ -469,15 +470,15 @@ const handleSearch = () => {
     return
   }
 
-  // 检查是否为地址（以太坊地址格式）
-  if (isAddress(query)) {
-    router.push(`/address/${query}`)
-    return
-  }
-
   // 检查是否为交易哈希
   if (query.length === 66 && query.startsWith('0x')) {
     router.push(`/tx/${query}`)
+    return
+  }
+
+  // 检查是否为地址（HEX / JVA B32 / JVA Full）
+  if (isAddress(query) || detectAddressFormat(query) !== 'unknown') {
+    router.push(`/address/${query}`)
     return
   }
 

@@ -16,7 +16,27 @@
         <div class="info-grid">
           <div class="info-item">
             <span class="label">地址</span>
-            <span class="value hash">{{ formatAddress(address) }}</span>
+            <span class="value hash address-formats" @click="cycleFormat" title="点击切换格式">
+              <span class="format-badge">{{ formatLabel }}</span>
+              {{ formatAddress(displayAddress) }}
+            </span>
+          </div>
+          <div class="info-item all-formats">
+            <span class="label">所有格式</span>
+            <div class="format-list">
+              <div class="format-row" @click="selectFormat('hex')" :class="{ active: inputFormat==='hex' }">
+                <span class="fmt-badge hex">HEX</span>
+                <span class="fmt-value">{{ hexAddress }}</span>
+              </div>
+              <div class="format-row" @click="selectFormat('b32')" :class="{ active: inputFormat==='b32' }">
+                <span class="fmt-badge b32">B32</span>
+                <span class="fmt-value">{{ b32Address }}</span>
+              </div>
+              <div class="format-row" @click="selectFormat('full')" :class="{ active: inputFormat==='full' }">
+                <span class="fmt-badge full">JVA</span>
+                <span class="fmt-value">{{ fullAddress }}</span>
+              </div>
+            </div>
           </div>
           <div class="info-item">
             <span class="label">能量余额</span>
@@ -40,12 +60,12 @@
         <div class="info-note">
           <p>ℹ️ wJ 是 Joule 的 ERC20 代币包装版本。1 wJ = 1 J，可以自由转账。</p>
         </div>
-      <WJOperations :address="address" :wjBalance="wjBalance" :formatAddress="formatAddress" :formatBalance="formatBalance" />
+      <WJOperations :address="hexAddress" :wjBalance="wjBalance" :formatAddress="formatAddress" :formatBalance="formatBalance" />
 </div>
 
       <div class="info-section">
         <h2>🆔 Core ID 与签到</h2>
-        <CoreIdSection :address="address" :formatAddress="formatAddress" />
+        <CoreIdSection :address="hexAddress" :formatAddress="formatAddress" />
       </div>
 
       <div class="info-section">
@@ -115,13 +135,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { formatEther, isAddress, formatUnits } from 'viem'
+import { formatEther, formatUnits } from 'viem'
 import { WJ_ADDRESS, wjABI } from '../contracts/wj'
 import WJOperations from './WJOperations.vue'
 import CoreIdSection from './CoreIdSection.vue'
 import { publicClient } from '../config/client'
+import { encodeJVA, detectAddressFormat, normalizeToHex } from '../utils/jvaddress'
 // import { useWalletStore } from '../stores/wallet'
 
 const router = useRouter()
@@ -134,10 +155,35 @@ interface Props {
 
 const props = defineProps<Props>()
 
-const address = ref(props.address)
+const error = ref<string | null>(null)
+const inputFormat = ref<'hex' | 'b32' | 'full'>('hex')
+const hexAddress = ref('')
+const b32Address = ref('')
+const fullAddress = ref('')
+
+function initAddress(raw: string) {
+  const format = detectAddressFormat(raw)
+  if (format === 'unknown') {
+    error.value = '无效的地址格式'
+    return false
+  }
+  inputFormat.value = format
+  const hex = normalizeToHex(raw)
+  if (!hex) {
+    error.value = '地址格式无效'
+    return false
+  }
+  hexAddress.value = hex
+  const encoded = encodeJVA(hex)
+  if (encoded.success) {
+    b32Address.value = encoded.b32Address
+    fullAddress.value = encoded.fullAddress
+  }
+  return true
+}
+
 const balance = ref<bigint | null>(null)
 const wjBalance = ref<bigint | null>(null)
-const error = ref<string | null>(null)
 const loadingBalance = ref(true)
 const loadingWJ = ref(true)
 
@@ -152,9 +198,37 @@ const targetBlock = ref('')
 
 const symbol = ref('J')
 
+const formatLabel = computed(() => ({
+  hex: 'HEX',
+  b32: 'B32',
+  full: 'JVA',
+}[inputFormat.value]))
+
 const formatAddress = (addr: string): string => {
   if (!addr) return ''
   return `${addr.substring(0, 10)}...${addr.substring(addr.length - 8)}`
+}
+
+const displayAddress = computed(() => {
+  switch (inputFormat.value) {
+    case 'hex': return hexAddress.value
+    case 'b32': return b32Address.value
+    case 'full': return fullAddress.value
+  }
+})
+
+initAddress(props.address)
+
+function cycleFormat() {
+  if (inputFormat.value === 'hex') inputFormat.value = 'b32'
+  else if (inputFormat.value === 'b32') inputFormat.value = 'full'
+  else inputFormat.value = 'hex'
+}
+
+function selectFormat(fmt: 'hex' | 'b32' | 'full') {
+  inputFormat.value = fmt
+  const addr = fmt === 'hex' ? hexAddress.value : fmt === 'b32' ? b32Address.value : fullAddress.value
+  router.replace({ params: { ...router.currentRoute.value.params, address: addr } })
 }
 
 const formatBalance = (balance: bigint | null): string => {
@@ -175,7 +249,7 @@ const loadBalance = async () => {
   loadingBalance.value = true
   try {
     const balanceData = await publicClient.getBalance({
-      address: address.value as `0x${string}`,
+      address: hexAddress.value as `0x${string}`,
     })
     balance.value = balanceData
   } catch (err) {
@@ -194,7 +268,7 @@ const loadWJBalance = async () => {
       address: WJ_ADDRESS,
       abi: wjABI,
       functionName: 'balanceOf',
-      args: [address.value as `0x${string}`],
+      args: [hexAddress.value as `0x${string}`],
     })
     wjBalance.value = balanceData as bigint
   } catch (err) {
@@ -230,8 +304,8 @@ const loadTransactions = async (page: number) => {
           try {
             const txData = await publicClient.getTransaction({ hash: tx as `0x${string}` })
             if (txData && 
-                (txData.from.toLowerCase() === address.value.toLowerCase() || 
-                 (txData.to && txData.to.toLowerCase() === address.value.toLowerCase()))) {
+                (txData.from.toLowerCase() === hexAddress.value.toLowerCase() || 
+                 (txData.to && txData.to.toLowerCase() === hexAddress.value.toLowerCase()))) {
               const receipt = await publicClient.getTransactionReceipt({ hash: tx as `0x${string}` })
               
               // 计算区块年龄
@@ -326,23 +400,15 @@ const jumpToBlock = async () => {
 }
 
 onMounted(async () => {
-  if (!isAddress(address.value)) {
-    error.value = '无效的地址格式'
-    return
-  }
-  
-  // ✅ 渐进式加载：立即开始所有数据加载，不等待
+  if (error.value) return
+
   loadBalance()
   loadWJBalance()
-  
-  // 检查 URL 中是否有 blockNumber 参数
+
   if (props.blockNumber) {
     const targetBlockNum = Number(props.blockNumber)
     if (!isNaN(targetBlockNum)) {
-      // 先加载一次以获取 maxBlock
       await loadTransactions(1)
-      
-      // 跳转到指定区块
       targetBlock.value = String(targetBlockNum)
       await jumpToBlock()
     } else {
@@ -636,5 +702,88 @@ onMounted(async () => {
 
 .jump-btn:hover {
   background: #2563eb;
+}
+
+.address-formats {
+  cursor: pointer;
+  position: relative;
+}
+
+.format-badge {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 4px;
+  margin-right: 6px;
+  background: #3b82f6;
+  color: white;
+  vertical-align: middle;
+}
+
+.all-formats {
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.format-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  align-items: flex-end;
+}
+
+.format-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s;
+  font-size: 0.85rem;
+}
+
+.format-row:hover {
+  background: #f1f5f9;
+}
+
+.format-row.active {
+  background: #eff6ff;
+  outline: 1px solid #93c5fd;
+}
+
+.fmt-badge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  min-width: 34px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.fmt-badge.hex {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.fmt-badge.b32 {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.fmt-badge.full {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.fmt-value {
+  font-family: 'Courier New', monospace;
+  color: #334155;
+  word-break: break-all;
+  font-size: 0.8rem;
 }
 </style>
