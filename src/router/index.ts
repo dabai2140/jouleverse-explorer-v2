@@ -42,12 +42,6 @@ const routes = [
     props: true
   },
   {
-    path: '/address/:address/block/:blockNumber',
-    name: 'addressDetailWithBlock',
-    component: AddressDetail,
-    props: true
-  },
-  {
     path: '/jns',
     name: 'jnsQuery',
     component: JNSQuery

@@ -259,7 +259,7 @@ onMounted(() => {
 .btn-disconnect {
   background: var(--jv-error-bg);
   color: var(--jv-error);
-  border: 1px solid rgba(235, 23, 39, 0.3);
+  border: 1px solid var(--jv-error);
   padding: 0 12px;
   height: 32px;
   border-radius: var(--jv-radius-sm);

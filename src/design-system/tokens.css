@@ -2,11 +2,11 @@
 /* 新功能页面通过 var(--jv-xxx) 使用这些变量，不要硬编码颜色值 */
 
 :root {
-  /* 品牌色 */
-  --jv-brand:          #EB1727;
-  --jv-brand-hover:    #D41422;
-  --jv-brand-pressed:  #B91C1C;
-  --jv-brand-subtle:   #FEF2F2;
+  /* 品牌色（蓝色主色调，红色仅保留在 logo/JvLoading 硬编码处） */
+  --jv-brand:          #2563EB;
+  --jv-brand-hover:    #1D4ED8;
+  --jv-brand-pressed:  #1E40AF;
+  --jv-brand-subtle:   #EFF6FF;
 
   /* 浅色主题（默认） */
   --jv-bg-page:        #F8FAFC;
@@ -17,9 +17,13 @@
   --jv-text-primary:   #0F172A;
   --jv-text-secondary: #475569;
   --jv-text-muted:     #64748B;
+  --jv-text-disabled:  #94A3B8;
 
   --jv-border:         #E2E8F0;
-  --jv-border-focus:   #EB1727;
+  --jv-border-focus:   #2563EB;
+
+  /* 字体 */
+  --jv-font-mono:      'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
 
   --jv-link:           #2563EB;
   --jv-link-hover:     #1D4ED8;
@@ -69,6 +73,12 @@
 
 /* 暗色主题 */
 [data-theme="dark"] {
+  /* 品牌色：在暗色背景上提亮以满足对比度 */
+  --jv-brand:          #3B82F6;
+  --jv-brand-hover:    #60A5FA;
+  --jv-brand-pressed:  #2563EB;
+  --jv-brand-subtle:   #1E3A5F;
+
   --jv-bg-page:        #0E0F12;
   --jv-bg-surface:     #17191D;
   --jv-bg-subtle:      #202329;
@@ -77,14 +87,13 @@
   --jv-text-primary:   #F4F4F5;
   --jv-text-secondary: #D4D4D8;
   --jv-text-muted:     #A1A1AA;
+  --jv-text-disabled:  #52525B;
 
   --jv-border:         #2F343D;
-  --jv-border-focus:   #EB1727;
+  --jv-border-focus:   #3B82F6;
 
   --jv-link:           #7DD3FC;
   --jv-link-hover:     #BAE6FD;
-
-  --jv-brand-subtle:   #3B0D0E;
 
   --jv-success:        #4ADE80;
   --jv-success-bg:     #052E16;
@@ -103,6 +112,11 @@
 /* 跟随系统 */
 @media (prefers-color-scheme: dark) {
   [data-theme="system"] {
+    --jv-brand:          #3B82F6;
+    --jv-brand-hover:    #60A5FA;
+    --jv-brand-pressed:  #2563EB;
+    --jv-brand-subtle:   #1E3A5F;
+
     --jv-bg-page:        #0E0F12;
     --jv-bg-surface:     #17191D;
     --jv-bg-subtle:      #202329;
@@ -110,10 +124,11 @@
     --jv-text-primary:   #F4F4F5;
     --jv-text-secondary: #D4D4D8;
     --jv-text-muted:     #A1A1AA;
+    --jv-text-disabled:  #52525B;
     --jv-border:         #2F343D;
+    --jv-border-focus:   #3B82F6;
     --jv-link:           #7DD3FC;
     --jv-link-hover:     #BAE6FD;
-    --jv-brand-subtle:   #3B0D0E;
     --jv-success:        #4ADE80;
     --jv-success-bg:     #052E16;
     --jv-warning:        #FBBF24;

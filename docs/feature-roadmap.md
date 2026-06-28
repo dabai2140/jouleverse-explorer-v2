@@ -37,6 +37,16 @@
 
 ### P0 — 缺陷修复（影响核心体验，优先处理）
 
+#### P0-2：J-Checkin 签到 App 在欧易 DeFi 浏览器失效
+- **现象**：`jvcore-checkin.505606.xyz` 在手机欧易 DeFi 浏览器上无法正常签到，页面无响应。
+- **根因分析（2026-06-28）**：
+  1. **CDN 超时**：`cdn.bootcdn.net/web3.min.js` 加载耗时 9.8s，欧易沙箱环境大概率超时，导致 `Web3` 未定义，整页静默崩溃。
+  2. **网络切换兼容性**：`wallet_switchEthereumChain` 失败后靠 `error.code === 4902` 触发 `wallet_addEthereumChain`，欧易钱包返回的错误码与 MetaMask 不同，导致切链逻辑永远走不进去。
+- **对比 v1**：v1 使用本地 Web3.js 文件 + 不做主动切链，因此正常工作。
+- **修复方案**：① 将 Web3.js 改为本地托管文件；② `wallet_addEthereumChain` 错误处理改为宽松判断（不只依赖 4902）。
+- **状态**：⏸ 待处理（记录于 2026-06-28）
+- **源码位置**：待确认（不在当前 explorer-v2 仓库内）
+
 #### P0-1：地址交易历史 getLogs 重构
 - **问题**：`AddressDetail.vue` 当前扫描全部区块来找某地址的交易，翻页时出现大量空页，且随区块高度增长越来越慢。
 - **正确方案**：改用 `getLogs` 过滤 Transfer/内部交易，或接入链上索引 API（如果 Jouleverse 有）。
@@ -48,11 +58,9 @@
 
 ### P1 — 功能补全（原规划 P1，已列入计划未实现）
 
-#### P1-1：JNS Mint 功能
-- **说明**：在当前 JNS 域名查询页（`JNSQuery.vue`）基础上，添加"购买/Mint 域名"功能，调用 JNS 合约写操作。
-- **依赖**：钱包连接（已有）、`src/contracts/jns.ts`（已有合约定义）
-- **参考**：v1 `views/jnsInfo.html` + `controllers/jnsInfoController.js`
-- **新文件**：`src/views/JNSMint.vue` 或在 `JNSQuery.vue` 中扩展
+#### ~~P1-1：JNS Mint 功能~~ — 暂不实现（合约限制）
+- **结论**：JNS `claim(name)` 函数为 owner-only，普通用户无法自助注册域名。v1 中 mint 按钮仅对合约 owner 显示，属于运营方后台工具，非用户侧功能。
+- **待办**：若 JNS 合约升级支持公开注册，再重新评估。
 
 #### P1-2：JNS 完整记录展示
 - **说明**：域名详情页展示 JNS 的所有记录（Ethereum address、Twitter、GitHub、description 等 NFT metadata 字段）。

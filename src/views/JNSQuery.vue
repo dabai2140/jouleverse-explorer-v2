@@ -16,24 +16,20 @@
           class="search-input"
           :disabled="loading"
         >
-        <button @click="searchDomain" class="search-btn" :disabled="loading || !searchQuery">
-          {{ loading ? '查询中...' : '查询' }}
-        </button>
+        <JvActionButton :loading="loading" :disabled="!searchQuery" @click="searchDomain">查询</JvActionButton>
       </div>
       <p class="search-hint">域名必须以 .j 结尾</p>
     </div>
 
     <!-- 错误提示 -->
-    <div v-if="error" class="error-message">
-      <p>{{ error }}</p>
-    </div>
+    <JvPageState v-if="error" type="search-empty" :description="error" />
 
     <!-- 域名信息 -->
     <div v-if="domainInfo" class="domain-info">
       <!-- 域名卡片 -->
       <div class="domain-card">
         <div class="domain-header">
-          <div v-if="domainInfo.logo" class="domain-logo" v-html="domainInfo.logo"></div>
+          <img v-if="domainInfo.logo" :src="domainInfo.logo" class="domain-logo" alt="JNS domain logo" />
           <div class="domain-title">
             <h2>{{ domainInfo.name }}.j</h2>
             <span class="domain-status" :class="{ 'bound': domainInfo.isBound, 'unbound': !domainInfo.isBound }">
@@ -63,7 +59,7 @@
         <div class="info-grid">
           <div class="info-item full-width">
             <span class="label">所有者地址</span>
-            <span class="value hash">{{ formatAddress(domainInfo.owner) }}</span>
+            <JvHashText :value="domainInfo.owner" type="address" :truncate="8" />
           </div>
         </div>
       </div>
@@ -73,9 +69,8 @@
         <div class="info-grid">
           <div class="info-item full-width">
             <span class="label">绑定钱包地址</span>
-            <span class="value hash" :class="{ 'unbound-address': !domainInfo.isBound }">
-              {{ domainInfo.isBound ? formatAddress(domainInfo.boundAddress) : '未绑定到任何地址' }}
-            </span>
+            <JvHashText v-if="domainInfo.isBound" :value="domainInfo.boundAddress" type="address" :truncate="8" />
+            <span v-else class="value unbound-address">未绑定到任何地址</span>
           </div>
         </div>
         <div class="info-note">
@@ -83,14 +78,33 @@
         </div>
       </div>
 
+      <!-- 域名描述 -->
+      <div v-if="domainInfo.description" class="info-section">
+        <h3>📝 描述</h3>
+        <div class="info-note">
+          <p>{{ domainInfo.description }}</p>
+        </div>
+      </div>
+
+      <!-- 扩展属性（Twitter/GitHub 等社交记录） -->
+      <div v-if="domainInfo.attributes.length > 0" class="info-section">
+        <h3>🏷️ 域名记录</h3>
+        <div class="info-grid">
+          <div
+            v-for="attr in domainInfo.attributes"
+            :key="attr.trait_type"
+            class="info-item"
+          >
+            <span class="label">{{ attr.trait_type }}</span>
+            <span class="value">{{ attr.value }}</span>
+          </div>
+        </div>
+      </div>
+
       <!-- 操作按钮 -->
       <div class="action-section">
-        <button @click="goToAddress(domainInfo.owner)" class="action-btn">
-          查看所有者详情
-        </button>
-        <button v-if="domainInfo.isBound" @click="goToAddress(domainInfo.boundAddress)" class="action-btn">
-          查看绑定地址详情
-        </button>
+        <JvActionButton type="default" @click="goToAddress(domainInfo.owner)">查看所有者详情</JvActionButton>
+        <JvActionButton v-if="domainInfo.isBound" type="default" @click="goToAddress(domainInfo.boundAddress)">查看绑定地址详情</JvActionButton>
       </div>
     </div>
 
@@ -107,15 +121,11 @@
           class="search-input"
           :disabled="reverseLoading"
         >
-        <button @click="reverseLookup" class="search-btn" :disabled="reverseLoading || !reverseQuery">
-          {{ reverseLoading ? '查询中...' : '反查' }}
-        </button>
+        <JvActionButton :loading="reverseLoading" :disabled="!reverseQuery" @click="reverseLookup">反查</JvActionButton>
       </div>
       <div v-if="reverseResult" class="reverse-result">
         <p>该地址绑定的域名：<strong>{{ reverseResult }}.j</strong></p>
-        <button @click="searchDomainByName(reverseResult)" class="action-btn small">
-          查看详情
-        </button>
+        <JvActionButton type="default" size="small" @click="searchDomainByName(reverseResult)">查看详情</JvActionButton>
       </div>
       <div v-if="reverseError" class="error-message small">
         <p>{{ reverseError }}</p>
@@ -130,6 +140,7 @@ import { useRouter } from 'vue-router'
 import { createPublicClient, http } from 'viem'
 import { JNS_ADDRESS, jnsABI } from '@/contracts/jns'
 import { jouleverseChain } from '@/config/chain'
+import { JvActionButton, JvHashText, JvPageState } from '../design-system'
 
 const router = useRouter()
 
@@ -144,6 +155,8 @@ const domainInfo = ref<{
   boundAddress: string
   isBound: boolean
   logo: string
+  description: string
+  attributes: { trait_type: string; value: string }[]
 } | null>(null)
 
 // 反查状态
@@ -156,12 +169,6 @@ const reverseResult = ref('')
 const publicClient = createPublicClient({
   transport: http(jouleverseChain.rpcUrls.default.http[0]),
 })
-
-// 格式化地址
-const formatAddress = (address: string): string => {
-  if (!address) return ''
-  return `${address.slice(0, 6)}...${address.slice(-4)}`
-}
 
 // 搜索域名
 const searchDomain = async () => {
@@ -201,49 +208,49 @@ const searchDomain = async () => {
       return
     }
     
-    // 查询 NFT 所有者
-    const owner = await publicClient.readContract({
-      address: JNS_ADDRESS,
-      abi: jnsABI,
-      functionName: 'ownerOf',
-      args: [tokenId]
-    }) as string
-    
-    // 查询绑定的地址
-    const boundAddress = await publicClient.readContract({
-      address: JNS_ADDRESS,
-      abi: jnsABI,
-      functionName: '_bound',
-      args: [tokenId]
-    }) as string
-    
-    // 获取 tokenURI (SVG logo)
-    const tokenURI = await publicClient.readContract({
-      address: JNS_ADDRESS,
-      abi: jnsABI,
-      functionName: 'tokenURI',
-      args: [tokenId]
-    }) as string
-    
-    // 解析 SVG (data:image/svg+xml;base64,...)
-    let logo = ''
-    if (tokenURI.startsWith('data:image/svg+xml;base64,')) {
-      const base64 = tokenURI.split(',')[1]
+    // 并行获取 owner / 绑定地址 / tokenURI
+    const [owner, boundAddress, tokenURI] = await Promise.all([
+      publicClient.readContract({
+        address: JNS_ADDRESS,
+        abi: jnsABI,
+        functionName: 'ownerOf',
+        args: [tokenId]
+      }) as Promise<string>,
+      publicClient.readContract({
+        address: JNS_ADDRESS,
+        abi: jnsABI,
+        functionName: '_bound',
+        args: [tokenId]
+      }) as Promise<string>,
+      publicClient.readContract({
+        address: JNS_ADDRESS,
+        abi: jnsABI,
+        functionName: 'tokenURI',
+        args: [tokenId]
+      }) as Promise<string>,
+    ])
+
+    // tokenURI 格式：data:application/json;base64,<JSON>
+    let logo = '', description = '', attributes: { trait_type: string; value: string }[] = []
+    const [prefix, payload] = tokenURI.split(',')
+    if (prefix === 'data:application/json;base64' && payload) {
       try {
-        const svg = atob(base64)
-        logo = svg
-      } catch (e) {
-        console.error('Failed to decode SVG:', e)
-      }
+        const meta = JSON.parse(atob(payload))
+        logo = meta.image || ''
+        description = meta.description || ''
+        attributes = Array.isArray(meta.attributes) ? meta.attributes : []
+      } catch { }
     }
-    
+
     domainInfo.value = {
       name,
       tokenId: Number(tokenId),
       owner,
       boundAddress,
       isBound: boundAddress !== '0x0000000000000000000000000000000000000000',
-      logo
+      logo,
+      description,
+      attributes,
     }
     
   } catch (e: any) {
@@ -330,138 +337,76 @@ onMounted(() => {
   padding: 20px;
 }
 
-.header {
-  margin-bottom: 24px;
-}
+.header { margin-bottom: 24px; }
 
 .back-btn {
-  background: #f5f5f5;
+  background: var(--jv-bg-subtle);
+  color: var(--jv-text-muted);
   border: none;
   padding: 8px 16px;
-  border-radius: 6px;
+  border-radius: var(--jv-radius-md);
   cursor: pointer;
   margin-bottom: 12px;
   font-size: 14px;
+  transition: background var(--jv-duration-fast) var(--jv-ease);
 }
+.back-btn:hover { background: var(--jv-bg-hover); }
 
-.back-btn:hover {
-  background: #e0e0e0;
-}
+h1 { font-size: 24px; color: var(--jv-text-primary); margin: 0; }
 
-h1 {
-  font-size: 24px;
-  color: #333;
-  margin: 0;
-}
-
-/* 搜索区域 */
 .search-section {
-  background: #f8f9fa;
+  background: var(--jv-bg-subtle);
   padding: 20px;
-  border-radius: 12px;
+  border-radius: var(--jv-radius-lg);
   margin-bottom: 20px;
 }
 
-.search-box {
-  display: flex;
-  gap: 10px;
-}
+.search-box { display: flex; gap: 10px; }
 
 .search-input {
   flex: 1;
   padding: 12px 16px;
-  border: 2px solid #e0e0e0;
-  border-radius: 8px;
+  border: 1px solid var(--jv-border);
+  border-radius: var(--jv-radius-md);
   font-size: 16px;
+  background: var(--jv-bg-surface);
+  color: var(--jv-text-primary);
+  transition: border-color var(--jv-duration-fast) var(--jv-ease);
 }
-
 .search-input:focus {
   outline: none;
-  border-color: #04aa6d;
+  border-color: var(--jv-border-focus);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--jv-brand) 12%, transparent);
 }
 
-.search-btn {
-  padding: 12px 24px;
-  background: #04aa6d;
-  color: white;
-  border: none;
-  border-radius: 8px;
-  font-size: 16px;
-  cursor: pointer;
-}
+.search-hint { margin-top: 8px; color: var(--jv-text-muted); font-size: 13px; }
 
-.search-btn:hover:not(:disabled) {
-  background: #039963;
-}
-
-.search-btn:disabled {
-  background: #ccc;
-  cursor: not-allowed;
-}
-
-.search-hint {
-  margin-top: 8px;
-  color: #666;
-  font-size: 13px;
-}
-
-/* 错误提示 */
-.error-message {
-  background: #fff3f3;
-  border: 1px solid #ffcdd2;
-  color: #c62828;
-  padding: 12px 16px;
-  border-radius: 8px;
-  margin-bottom: 20px;
-}
-
-.error-message.small {
-  padding: 8px 12px;
-  font-size: 14px;
-}
-
-/* 域名信息 */
 .domain-info {
-  background: white;
-  border-radius: 12px;
+  background: var(--jv-bg-surface);
+  border: 1px solid var(--jv-border);
+  border-radius: var(--jv-radius-lg);
   padding: 20px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
 }
 
 .domain-card {
-  background: linear-gradient(135deg, #04aa6d 0%, #038c5a 100%);
+  background: linear-gradient(135deg, var(--jv-brand) 0%, var(--jv-brand-pressed) 100%);
   color: white;
   padding: 24px;
-  border-radius: 12px;
+  border-radius: var(--jv-radius-lg);
   margin-bottom: 20px;
 }
 
-.domain-header {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-}
+.domain-header { display: flex; align-items: center; gap: 20px; }
 
 .domain-logo {
   width: 80px;
   height: 80px;
+  border-radius: var(--jv-radius-md);
+  object-fit: contain;
   background: white;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
 }
 
-.domain-logo :deep(svg) {
-  width: 100%;
-  height: 100%;
-}
-
-.domain-title h2 {
-  margin: 0 0 8px 0;
-  font-size: 28px;
-}
+.domain-title h2 { margin: 0 0 8px 0; font-size: 28px; }
 
 .domain-status {
   display: inline-block;
@@ -471,23 +416,15 @@ h1 {
   background: rgba(255,255,255,0.2);
 }
 
-.domain-status.bound {
-  background: rgba(255,255,255,0.3);
-}
+.domain-status.bound { background: rgba(255,255,255,0.3); }
+.domain-status.unbound { background: rgba(0,0,0,0.2); }
 
-.domain-status.unbound {
-  background: rgba(0,0,0,0.2);
-}
-
-/* 信息区域 */
-.info-section {
-  margin-bottom: 20px;
-}
+.info-section { margin-bottom: 20px; }
 
 .info-section h3 {
   margin: 0 0 12px 0;
   font-size: 16px;
-  color: #333;
+  color: var(--jv-text-primary);
 }
 
 .info-grid {
@@ -497,113 +434,74 @@ h1 {
 }
 
 .info-item {
-  background: #f8f9fa;
+  background: var(--jv-bg-subtle);
   padding: 12px 16px;
-  border-radius: 8px;
+  border-radius: var(--jv-radius-md);
 }
 
-.info-item.full-width {
-  grid-column: 1 / -1;
-}
+.info-item.full-width { grid-column: 1 / -1; }
 
 .info-item .label {
   display: block;
-  color: #666;
+  color: var(--jv-text-muted);
   font-size: 13px;
   margin-bottom: 4px;
 }
 
-.info-item .value {
-  font-size: 15px;
-  color: #333;
-  word-break: break-all;
-}
-
-.info-item .value.hash {
-  font-family: monospace;
-  font-size: 13px;
-}
-
-.info-item .value.unbound-address {
-  color: #999;
-  font-style: italic;
-}
+.info-item .value { font-size: 15px; color: var(--jv-text-primary); word-break: break-all; }
+.info-item .value.unbound-address { color: var(--jv-text-disabled); font-style: italic; }
 
 .info-note {
   margin-top: 12px;
   padding: 10px 14px;
-  background: #e8f5e9;
-  border-radius: 6px;
+  background: var(--jv-brand-subtle);
+  border-radius: var(--jv-radius-md);
   font-size: 13px;
-  color: #555;
+  color: var(--jv-text-secondary);
 }
 
-/* 操作按钮 */
-.action-section {
-  display: flex;
-  gap: 12px;
-  margin-top: 20px;
-}
+.action-section { display: flex; gap: 12px; margin-top: 20px; }
 
-.action-btn {
-  flex: 1;
-  padding: 12px 20px;
-  background: #04aa6d;
-  color: white;
-  border: none;
-  border-radius: 8px;
-  font-size: 14px;
-  cursor: pointer;
-}
-
-.action-btn:hover {
-  background: #039963;
-}
-
-.action-btn.small {
-  padding: 8px 16px;
-  font-size: 13px;
-  margin-top: 10px;
-}
-
-/* 反查区域 */
 .reverse-lookup-section {
   margin-top: 24px;
-  background: #f8f9fa;
+  background: var(--jv-bg-subtle);
   padding: 20px;
-  border-radius: 12px;
+  border-radius: var(--jv-radius-lg);
+  border: 1px solid var(--jv-border);
 }
 
 .reverse-lookup-section h3 {
   margin: 0 0 8px 0;
   font-size: 16px;
-  color: #333;
+  color: var(--jv-text-primary);
 }
 
 .reverse-lookup-section .hint {
   margin: 0 0 12px 0;
-  color: #666;
+  color: var(--jv-text-muted);
   font-size: 13px;
 }
 
-.reverse-search-box {
-  display: flex;
-  gap: 10px;
-}
+.reverse-search-box { display: flex; gap: 10px; }
 
 .reverse-result {
   margin-top: 16px;
   padding: 12px 16px;
-  background: #e8f5e9;
-  border-radius: 8px;
+  background: var(--jv-brand-subtle);
+  border: 1px solid var(--jv-brand);
+  border-radius: var(--jv-radius-md);
 }
 
-.reverse-result p {
-  margin: 0;
+.reverse-result p { margin: 0; font-size: 14px; color: var(--jv-text-primary); }
+.reverse-result strong { color: var(--jv-brand); }
+
+.error-message.small {
+  margin-top: 8px;
+  padding: 8px 12px;
   font-size: 14px;
-}
-
-.reverse-result strong {
-  color: #04aa6d;
+  background: var(--jv-error-bg);
+  border: 1px solid var(--jv-error);
+  border-radius: var(--jv-radius-md);
+  color: var(--jv-error);
 }
 </style>

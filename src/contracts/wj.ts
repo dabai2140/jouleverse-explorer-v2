@@ -70,10 +70,3 @@ export const wjABI = [
 
 export type WJContract = typeof wjABI
 
-// 添加调试日志
-if (typeof console !== 'undefined') {
-  console.log('=== wj.ts Module Load ===')
-  console.log('wjABI type:', typeof wjABI)
-  console.log('wjABI is array:', Array.isArray(wjABI))
-  console.log('wjABI value:', wjABI)
-}
