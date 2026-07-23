@@ -1,33 +1,30 @@
 <template>
   <div class="home">
-    <div class="header">
-      <div class="logo">
+    <div class="page-header">
+      <div class="logo-row">
         <svg width="40" height="40" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
           <circle cx="256" cy="256" r="256" fill="#EB1727"/>
           <path fill="#fefefe" d="M202.4025 130.5h127.195q.2 75-.5 150-5 79.5-82.5 97.5-34.4 6.2-68-3-54.3-18.8-64.5-75.5a133 133 0 0 1-2.5-28h56q3.2 66.9 69 55.5 27-8 33.5-35.5.3-4.3 2-13 .7-49 .5-98a1260 1260 0 0 0-71-1M305.6 226l100 60-100"/>
         </svg>
         <h1>Jouleverse</h1>
       </div>
-      
+
       <div class="status-bar">
-        <div class="status-indicator" :class="{ online: networkStatus === 'online', offline: networkStatus === 'offline' }">
-          <div class="dot"></div>
-          <span class="status-text">{{ networkStatus === 'online' ? '网络在线' : '网络离线' }}</span>
+        <div class="status-pill" :class="{ online: networkStatus === 'online', offline: networkStatus === 'offline' }">
+          <span class="dot"></span>
+          <span>{{ networkStatus === 'online' ? '网络在线' : networkStatus === 'offline' ? '网络离线' : '检测中...' }}</span>
         </div>
-        
-        <div class="uptime" v-if="latestBlock">
-          <span class="label">最新区块</span>
-          <span class="value">#{{ latestBlock.number }}</span>
+        <div class="stat-pill" v-if="latestBlock">
+          <span class="pill-label">最新区块</span>
+          <span class="pill-value">#{{ latestBlock.number }}</span>
         </div>
-
-        <div class="uptime" v-if="networkUptime">
-          <span class="label">稳定运行</span>
-          <span class="value">{{ networkUptime }}</span>
+        <div class="stat-pill" v-if="networkUptime">
+          <span class="pill-label">稳定运行</span>
+          <span class="pill-value">{{ networkUptime }}</span>
         </div>
-
-        <div class="uptime" v-if="wsConnected">
-          <span class="label">实时推送</span>
-          <span class="value ws-status">✓ 在线</span>
+        <div class="stat-pill" v-if="wsConnected">
+          <span class="pill-label">实时推送</span>
+          <span class="pill-value ws-live">✓ 在线</span>
         </div>
       </div>
     </div>
@@ -42,67 +39,35 @@
             placeholder="搜索区块、交易、地址或 JNS 域名..."
             class="search-input"
           >
-          <button @click="handleSearch" class="search-btn">🔍 搜索</button>
+          <button @click="handleSearch" class="search-btn">搜索</button>
         </div>
         <div class="search-hints">
-          <span>快速链接：</span>
-          <a href="/jns" class="quick-link">JNS 域名查询</a>
+          快速链接：<router-link to="/jns" class="quick-link">JNS 域名查询</router-link>
         </div>
       </div>
 
       <!-- Timelock 能量信息 -->
-      <div class="timelock-info">
-        <div class="section-header">
+      <div class="panel">
+        <div class="panel-header">
           <h2>Timelock 能量信息</h2>
         </div>
-
-        <div class="loading" v-if="timelockLoading">加载能量数据中...</div>
-
-        <div class="timelock-cards" v-else>
+        <JvLoading v-if="timelockLoading" label="加载能量数据中..." />
+        <div v-else class="timelock-grid">
           <div class="timelock-card" v-if="timelockCore">
-            <div class="card-header">
-              <span class="card-title">核心时间锁</span>
-            </div>
+            <div class="card-title">核心时间锁</div>
             <div class="card-stats">
-              <div class="stat-item">
-                <span class="stat-label">月度预算</span>
-                <span class="stat-value">{{ formatEnergy(timelockCore.monthlyBudget) }}</span>
-              </div>
-              <div class="stat-item">
-                <span class="stat-label">已使用</span>
-                <span class="stat-value">{{ formatEnergy(timelockCore.used) }}</span>
-              </div>
-              <div class="stat-item">
-                <span class="stat-label">已释放</span>
-                <span class="stat-value">{{ formatEnergy(timelockCore.released) }}</span>
-              </div>
-              <div class="stat-item">
-                <span class="stat-label">可用余额</span>
-                <span class="stat-value highlight">{{ formatEnergy(timelockCore.available) }}</span>
+              <div class="stat-cell" v-for="(val, label) in timelockCoreStats" :key="label">
+                <span class="stat-label">{{ label }}</span>
+                <span class="stat-value" :class="{ highlight: label === '可用余额' }">{{ val }}</span>
               </div>
             </div>
           </div>
-
           <div class="timelock-card" v-if="timelockEco">
-            <div class="card-header">
-              <span class="card-title">生态时间锁</span>
-            </div>
+            <div class="card-title">生态时间锁</div>
             <div class="card-stats">
-              <div class="stat-item">
-                <span class="stat-label">月度预算</span>
-                <span class="stat-value">{{ formatEnergy(timelockEco.monthlyBudget) }}</span>
-              </div>
-              <div class="stat-item">
-                <span class="stat-label">已使用</span>
-                <span class="stat-value">{{ formatEnergy(timelockEco.used) }}</span>
-              </div>
-              <div class="stat-item">
-                <span class="stat-label">已释放</span>
-                <span class="stat-value">{{ formatEnergy(timelockEco.released) }}</span>
-              </div>
-              <div class="stat-item">
-                <span class="stat-label">可用余额</span>
-                <span class="stat-value highlight">{{ formatEnergy(timelockEco.available) }}</span>
+              <div class="stat-cell" v-for="(val, label) in timelockEcoStats" :key="label">
+                <span class="stat-label">{{ label }}</span>
+                <span class="stat-value" :class="{ highlight: label === '可用余额' }">{{ val }}</span>
               </div>
             </div>
           </div>
@@ -110,60 +75,62 @@
       </div>
 
       <!-- 最新区块列表 -->
-      <div class="latest-blocks">
-        <div class="section-header">
+      <div class="panel">
+        <div class="panel-header">
           <h2>最新区块</h2>
-          <button @click="$router.push('/blocks')" class="view-all-btn">查看全部 →</button>
+          <button @click="$router.push('/blocks')" class="link-btn">查看全部 →</button>
         </div>
-
-        <div class="loading" v-if="loading">加载区块数据中...</div>
-
-        <div class="blocks-list" v-else-if="blocks.length > 0">
-          <div v-for="block in blocks" :key="block.hash" class="block-card" :class="{ 'new-block': block.isNew }" @click="$router.push(`/block/${block.number}`)">
-            <div class="block-header">
-              <div class="block-number">
-                <span class="label">区块</span>
-                <span class="value">#{{ block.number }}</span>
+        <JvLoading v-if="loading" label="加载区块数据中..." />
+        <div v-else-if="blocks.length > 0" class="blocks-list">
+          <div
+            v-for="block in blocks"
+            :key="block.hash"
+            class="block-card"
+            :class="{ 'block-card--new': block.isNew }"
+            @click="$router.push(`/block/${block.number}`)"
+          >
+            <div class="block-card-head">
+              <div class="block-num-row">
+                <span class="muted">区块</span>
+                <span class="block-num">#{{ block.number }}</span>
               </div>
-              <div class="block-age">
+              <div class="block-age-row">
                 <span v-if="block.isNew" class="new-badge">新</span>
-                <span class="value">{{ formatAge(block.timestamp) }}</span>
+                <span class="muted">{{ formatAge(block.timestamp) }}</span>
               </div>
             </div>
-
-            <div class="block-details">
-              <div class="detail-row">
-                <span class="label">哈希</span>
-                <span class="value hash">{{ formatHash(block.hash) }}</span>
+            <div class="block-card-body">
+              <div class="meta-row">
+                <span class="muted">哈希</span>
+                <JvHashText :value="block.hash" type="block" :truncate="8" :linkable="false" :copyable="false" />
               </div>
-              <div class="detail-row">
-                <span class="label">交易数</span>
-                <span class="value">{{ block.transactions.length }}</span>
+              <div class="meta-row">
+                <span class="muted">交易数</span>
+                <span>{{ block.transactions.length }}</span>
               </div>
-              <div class="detail-row">
-                <span class="label">Gas</span>
-                <span class="value">{{ formatNumber(block.gasUsed) }}</span>
+              <div class="meta-row">
+                <span class="muted">Gas</span>
+                <span>{{ formatNumber(block.gasUsed) }}</span>
               </div>
             </div>
           </div>
         </div>
-
-        <div class="empty" v-else>
-          <p>暂无区块数据</p>
-        </div>
+        <JvPageState v-else type="empty" title="暂无区块数据" />
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { formatUnits, isAddress } from 'viem'
+import { isAddress, formatUnits } from 'viem'
+import { formatAge, formatNumber } from '../utils/format'
 import { timelockABI, TIMELOCK_CORE_ADDRESS, TIMELOCK_ECO_ADDRESS } from '../contracts/timelock'
 import type { TimelockData } from '../contracts/timelock'
 import { publicClient } from '../config/client'
 import { detectAddressFormat } from '../utils/jvaddress'
+import { JvLoading, JvPageState, JvHashText } from '../design-system'
 
 const router = useRouter()
 
@@ -181,251 +148,129 @@ const blocks = ref<Block[]>([])
 const latestBlock = ref<Block | null>(null)
 const loading = ref(false)
 const searchQuery = ref('')
-const networkUptime = ref<string>('')
+const networkUptime = ref('')
 const wsConnected = ref(false)
 
-// WebSocket 相关
 let ws: WebSocket | null = null
 let wsSubscriptionId: string | null = null
 
-// Timelock 能量数据
 const timelockCore = ref<TimelockData | null>(null)
 const timelockEco = ref<TimelockData | null>(null)
 const timelockLoading = ref(false)
 
-const formatAge = (timestamp: number): string => {
-  const blockTime = timestamp * 1000
-  const now = Date.now()
-  const diff = Math.floor((now - blockTime) / 1000)
 
-  if (diff < 60) return `${diff} 秒前`
-  if (diff < 3600) return `${Math.floor(diff / 60)} 分钟前`
-  if (diff < 86400) return `${Math.floor(diff / 3600)} 小时前`
-  return `${Math.floor(diff / 86400)} 天前`
-}
-
-const formatUptime = (genesisTimestamp: number): string => {
-  const now = Math.floor(Date.now() / 1000)
-  const diff = now - genesisTimestamp
-
+const formatUptime = (genesis: number): string => {
+  const diff = Math.floor(Date.now() / 1000) - genesis
   const days = Math.floor(diff / 86400)
   const hours = Math.floor((diff % 86400) / 3600)
-  const minutes = Math.floor((diff % 3600) / 60)
-
   const years = Math.floor(days / 365)
-  const remainingDays = days % 365
-
-  if (years > 0) {
-    return `${years}年${remainingDays}天${hours}小时`
-  } else if (days > 0) {
-    return `${days}天${hours}小时`
-  } else if (hours > 0) {
-    return `${hours}小时${minutes}分钟`
-  } else {
-    return `${minutes}分钟`
-  }
+  const remDays = days % 365
+  if (years > 0) return `${years}年${remDays}天${hours}小时`
+  if (days > 0) return `${days}天${hours}小时`
+  return `${hours}小时${Math.floor((diff % 3600) / 60)}分钟`
 }
 
-const formatHash = (hash: string): string => {
-  if (!hash) return ''
-  return `${hash.substring(0, 10)}...${hash.substring(hash.length - 8)}`
-}
-
-const formatNumber = (num: bigint): string => {
-  return formatUnits(num, 0)
-}
 
 const formatEnergy = (num: bigint): string => {
-  const value = Number(formatUnits(num, 18))
-  
-  // 处理非常大的数字（万、亿）
-  if (value >= 100000000) {
-    const formatted = (value / 100000000).toFixed(2)
-    return (formatted.endsWith('.00') ? formatted.slice(0, -3) : formatted) + '亿 J'
-  } else if (value >= 10000) {
-    const formatted = (value / 10000).toFixed(2)
-    return (formatted.endsWith('.00') ? formatted.slice(0, -3) : formatted) + '万 J'
-  } else {
-    const formatted = value.toFixed(2)
-    return (formatted.endsWith('.00') ? formatted.slice(0, -3) : formatted) + ' J'
-  }
+  const v = Number(formatUnits(num, 18))
+  if (v >= 1e8) return `${(v / 1e8).toFixed(2).replace(/\.00$/, '')}亿 J`
+  if (v >= 1e4) return `${(v / 1e4).toFixed(2).replace(/\.00$/, '')}万 J`
+  return `${v.toFixed(2).replace(/\.00$/, '')} J`
 }
+
+const timelockCoreStats = computed(() => timelockCore.value ? ({
+  '月度预算': formatEnergy(timelockCore.value.monthlyBudget),
+  '已使用': formatEnergy(timelockCore.value.used),
+  '已释放': formatEnergy(timelockCore.value.released),
+  '可用余额': formatEnergy(timelockCore.value.available),
+}) : {})
+
+const timelockEcoStats = computed(() => timelockEco.value ? ({
+  '月度预算': formatEnergy(timelockEco.value.monthlyBudget),
+  '已使用': formatEnergy(timelockEco.value.used),
+  '已释放': formatEnergy(timelockEco.value.released),
+  '可用余额': formatEnergy(timelockEco.value.available),
+}) : {})
 
 const fetchTimelockData = async (address: string) => {
   try {
     const [monthlyBudget, monthlyBlocks, used, released, available] = await Promise.all([
-      publicClient.readContract({
-        address: address as `0x${string}`,
-        abi: timelockABI,
-        functionName: 'MONTHLY_BUDGET',
-      }),
-      publicClient.readContract({
-        address: address as `0x${string}`,
-        abi: timelockABI,
-        functionName: 'MONTHLY_BLOCKS',
-      }),
-      publicClient.readContract({
-        address: address as `0x${string}`,
-        abi: timelockABI,
-        functionName: 'used',
-      }),
-      publicClient.readContract({
-        address: address as `0x${string}`,
-        abi: timelockABI,
-        functionName: 'released',
-      }),
-      publicClient.readContract({
-        address: address as `0x${string}`,
-        abi: timelockABI,
-        functionName: 'available',
-      }),
+      publicClient.readContract({ address: address as `0x${string}`, abi: timelockABI, functionName: 'MONTHLY_BUDGET' }),
+      publicClient.readContract({ address: address as `0x${string}`, abi: timelockABI, functionName: 'MONTHLY_BLOCKS' }),
+      publicClient.readContract({ address: address as `0x${string}`, abi: timelockABI, functionName: 'used' }),
+      publicClient.readContract({ address: address as `0x${string}`, abi: timelockABI, functionName: 'released' }),
+      publicClient.readContract({ address: address as `0x${string}`, abi: timelockABI, functionName: 'available' }),
     ])
-
-    return {
-      monthlyBudget: monthlyBudget as bigint,
-      monthlyBlocks: monthlyBlocks as bigint,
-      used: used as bigint,
-      released: released as bigint,
-      available: available as bigint,
-    }
-  } catch (error) {
-    console.error('Failed to fetch timelock data:', error)
-    return null
-  }
+    return { monthlyBudget, monthlyBlocks, used, released, available } as TimelockData
+  } catch { return null }
 }
 
 const fetchAllTimelockData = async () => {
   timelockLoading.value = true
   try {
-    const [coreData, ecoData] = await Promise.all([
+    const [core, eco] = await Promise.all([
       fetchTimelockData(TIMELOCK_CORE_ADDRESS),
       fetchTimelockData(TIMELOCK_ECO_ADDRESS),
     ])
-    timelockCore.value = coreData
-    timelockEco.value = ecoData
-  } catch (error) {
-    console.error('Failed to fetch timelock data:', error)
-  } finally {
-    timelockLoading.value = false
-  }
+    timelockCore.value = core
+    timelockEco.value = eco
+  } finally { timelockLoading.value = false }
 }
 
-// Jouleverse 创世区块时间戳（block 0，固定不变）
 const GENESIS_TIMESTAMP = 1664451960
 
 const fetchLatestBlocks = async () => {
   loading.value = true
   try {
     const latest = await publicClient.getBlockNumber()
-    const latestNumber = Number(latest)
-
     networkUptime.value = formatUptime(GENESIS_TIMESTAMP)
-
-    // 并行获取最新区块 + 最近 10 个区块
     const blockNumbers = Array.from({ length: 10 }, (_, i) => latest - BigInt(i))
-    const [latestBlockData, ...recentBlocks] = await Promise.all([
-      publicClient.getBlock({ blockNumber: latest }),
-      ...blockNumbers.map(blockNumber => publicClient.getBlock({ blockNumber })),
-    ])
-
-    if (latestBlockData) {
+    const fetched = await Promise.all(blockNumbers.map(n => publicClient.getBlock({ blockNumber: n })))
+    if (fetched[0]) {
       latestBlock.value = {
-        number: latestNumber,
-        hash: latestBlockData.hash || '',
-        timestamp: Number(latestBlockData.timestamp),
-        transactions: latestBlockData.transactions as string[],
-        gasUsed: latestBlockData.gasUsed,
+        number: Number(latest),
+        hash: fetched[0].hash || '',
+        timestamp: Number(fetched[0].timestamp),
+        transactions: fetched[0].transactions as string[],
+        gasUsed: fetched[0].gasUsed,
       }
-
-      const currentTime = Math.floor(Date.now() / 1000)
-      const timeDiff = currentTime - Number(latestBlockData.timestamp)
-      networkStatus.value = timeDiff < 300 ? 'online' : 'offline'
+      const diff = Math.floor(Date.now() / 1000) - Number(fetched[0].timestamp)
+      networkStatus.value = diff < 300 ? 'online' : 'offline'
     }
-
-    blocks.value = recentBlocks
-      .filter(Boolean)
-      .map(block => ({
-        number: Number(block!.number),
-        hash: block!.hash || '',
-        timestamp: Number(block!.timestamp),
-        transactions: block!.transactions as string[],
-        gasUsed: block!.gasUsed,
-      }))
-  } catch (error) {
-    console.error('Failed to fetch blocks:', error)
-    networkStatus.value = 'offline'
-  } finally {
-    loading.value = false
-  }
+    blocks.value = fetched.filter(Boolean).map(b => ({
+      number: Number(b!.number),
+      hash: b!.hash || '',
+      timestamp: Number(b!.timestamp),
+      transactions: b!.transactions as string[],
+      gasUsed: b!.gasUsed,
+    }))
+  } catch { networkStatus.value = 'offline' }
+  finally { loading.value = false }
 }
 
-// WebSocket 连接和订阅
 const connectWebSocket = () => {
   try {
     ws = new WebSocket('wss://rpc.jnsdao.com:8505')
-    
     ws.onopen = () => {
-      console.log('✅ WebSocket 连接成功')
       wsConnected.value = true
-      
-      // 订阅新区块
-      const subscribeMsg = {
-        jsonrpc: '2.0',
-        method: 'eth_subscribe',
-        params: ['newHeads'],
-        id: 1
-      }
-      ws?.send(JSON.stringify(subscribeMsg))
-      console.log('📤 发送订阅请求: eth_subscribe newHeads')
+      ws?.send(JSON.stringify({ jsonrpc: '2.0', method: 'eth_subscribe', params: ['newHeads'], id: 1 }))
     }
-    
     ws.onmessage = (event) => {
       try {
         const msg = JSON.parse(event.data)
-        
-        // 订阅成功响应
-        if (msg.result && !wsSubscriptionId) {
-          wsSubscriptionId = msg.result
-          console.log('✅ WebSocket 订阅成功，订阅 ID:', wsSubscriptionId)
-        }
-        
-        // 收到新区块推送
-        if (msg.method === 'eth_subscription' && msg.params && msg.params.result) {
-          const blockData = msg.params.result
-          console.log('🎉 收到新区块推送:', blockData.number)
-          
-          handleNewBlock(blockData)
-        }
-      } catch (error) {
-        console.error('解析 WebSocket 消息失败:', error)
-      }
+        if (msg.result && !wsSubscriptionId) wsSubscriptionId = msg.result
+        if (msg.method === 'eth_subscription' && msg.params?.result) handleNewBlock(msg.params.result)
+      } catch { }
     }
-    
-    ws.onerror = (error) => {
-      console.error('❌ WebSocket 错误:', error)
-      wsConnected.value = false
-    }
-    
+    ws.onerror = () => { wsConnected.value = false }
     ws.onclose = () => {
-      console.log('🔌 WebSocket 连接关闭')
       wsConnected.value = false
       wsSubscriptionId = null
-      
-      // 5 秒后尝试重连
-      setTimeout(() => {
-        if (!ws || ws.readyState === WebSocket.CLOSED) {
-          console.log('🔄 尝试重新连接 WebSocket...')
-          connectWebSocket()
-        }
-      }, 5000)
+      setTimeout(() => { if (!ws || ws.readyState === WebSocket.CLOSED) connectWebSocket() }, 5000)
     }
-  } catch (error) {
-    console.error('创建 WebSocket 连接失败:', error)
-    wsConnected.value = false
-  }
+  } catch { wsConnected.value = false }
 }
 
-// 处理新区块
 const handleNewBlock = (blockData: any) => {
   const newBlock: Block = {
     number: parseInt(blockData.number, 16),
@@ -433,501 +278,311 @@ const handleNewBlock = (blockData: any) => {
     timestamp: parseInt(blockData.timestamp, 16),
     transactions: blockData.transactions || [],
     gasUsed: BigInt(blockData.gasUsed || 0),
-    isNew: true
+    isNew: true,
   }
-  
-  // 更新最新区块
   latestBlock.value = newBlock
-  
-  // 更新网络状态
   networkStatus.value = 'online'
-  
-  // 将新区块插入到列表最前面
   blocks.value.unshift(newBlock)
-  
-  // 保持列表不超过 10 个
-  if (blocks.value.length > 10) {
-    blocks.value = blocks.value.slice(0, 10)
-  }
-  
-  // 3 秒后移除"新"标记
+  if (blocks.value.length > 10) blocks.value = blocks.value.slice(0, 10)
   setTimeout(() => {
-    const block = blocks.value.find(b => b.hash === newBlock.hash)
-    if (block) {
-      block.isNew = false
-    }
+    const b = blocks.value.find(b => b.hash === newBlock.hash)
+    if (b) b.isNew = false
   }, 3000)
 }
 
 const handleSearch = () => {
-  const query = searchQuery.value.trim()
-  if (!query) return
-
-  // 检查是否为 JNS 域名
-  if (query.toLowerCase().endsWith('.j')) {
-    router.push(`/jns?domain=${query}`)
-    return
-  }
-
-  // 检查是否为区块号
-  if (/^\d+$/.test(query)) {
-    router.push(`/block/${query}`)
-    return
-  }
-
-  // 检查是否为交易哈希
-  if (query.length === 66 && query.startsWith('0x')) {
-    router.push(`/tx/${query}`)
-    return
-  }
-
-  // 检查是否为地址（HEX / JVA B32 / JVA Full）
-  if (isAddress(query) || detectAddressFormat(query) !== 'unknown') {
-    router.push(`/address/${query}`)
-    return
-  }
-
-  // 默认尝试作为区块号
-  router.push(`/block/${query}`)
+  const q = searchQuery.value.trim()
+  if (!q) return
+  if (q.toLowerCase().endsWith('.j')) { router.push(`/jns?domain=${q}`); return }
+  if (/^\d+$/.test(q)) { router.push(`/block/${q}`); return }
+  if (q.length === 66 && q.startsWith('0x')) { router.push(`/tx/${q}`); return }
+  if (isAddress(q) || detectAddressFormat(q) !== 'unknown') { router.push(`/address/${q}`); return }
+  router.push(`/block/${q}`)
 }
 
-onMounted(() => {
-  fetchLatestBlocks()
-  fetchAllTimelockData()
-  // 连接 WebSocket 实时订阅
-  connectWebSocket()
-})
-
-onUnmounted(() => {
-  // 关闭 WebSocket 连接
-  if (ws) {
-    ws.close()
-  }
-})
+onMounted(() => { fetchLatestBlocks(); fetchAllTimelockData(); connectWebSocket() })
+onUnmounted(() => { if (ws) ws.close() })
 </script>
 
 <style scoped>
 .home {
-  width: 100%;
   max-width: 1200px;
   margin: 0 auto;
   padding: 20px;
-  min-height: 100vh;
 }
 
-.header {
-  padding: 30px 0;
-  border-bottom: 2px solid #e2e8f0;
-  margin-bottom: 30px;
+/* ── Header ── */
+.page-header {
+  padding: 28px 0;
+  border-bottom: 1px solid var(--jv-border);
+  margin-bottom: 28px;
 }
 
-.logo {
+.logo-row {
   display: flex;
   align-items: center;
-  gap: 16px;
-  margin-bottom: 20px;
+  gap: 14px;
+  margin-bottom: 18px;
 }
 
-.logo svg {
-  flex-shrink: 0;
-}
-
-.logo h1 {
-  color: #1e293b;
+.logo-row h1 {
   margin: 0;
-  font-size: 2rem;
+  font-size: 1.8rem;
   font-weight: 700;
+  color: var(--jv-text-primary);
 }
 
 .status-bar {
   display: flex;
-  gap: 20px;
+  gap: 12px;
   flex-wrap: wrap;
 }
 
-.status-indicator {
-  display: flex;
+.status-pill, .stat-pill {
+  display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 16px;
-  background: #f1f5f9;
-  border-radius: 20px;
+  padding: 6px 14px;
+  background: var(--jv-bg-subtle);
+  border-radius: var(--jv-radius-full);
+  font-size: 0.85rem;
 }
 
-.status-indicator .dot {
-  width: 10px;
-  height: 10px;
+.status-pill .dot {
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
-  background: #64748b;
+  background: var(--jv-text-muted);
+  flex-shrink: 0;
 }
 
-.status-indicator.online .dot {
-  background: #22c55e;
-  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.2);
-}
+.status-pill { color: var(--jv-text-muted); }
 
-.status-indicator.offline .dot {
-  background: #ef4444;
-  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.2);
-}
+.status-pill.online { background: var(--jv-success-bg); color: var(--jv-success); }
+.status-pill.online .dot { background: var(--jv-success); box-shadow: 0 0 0 3px color-mix(in srgb, var(--jv-success) 25%, transparent); }
+.status-pill.offline { background: var(--jv-error-bg); color: var(--jv-error); }
+.status-pill.offline .dot { background: var(--jv-error); }
 
-.status-text {
-  color: #64748b;
-  font-size: 0.9rem;
-  font-weight: 500;
-}
+.pill-label { color: var(--jv-text-muted); }
+.pill-value { color: var(--jv-text-primary); font-weight: 600; }
+.ws-live { color: var(--jv-success); }
 
-.uptime {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  background: #f1f5f9;
-  border-radius: 20px;
-}
+/* ── Content ── */
+.content { display: flex; flex-direction: column; gap: 24px; }
 
-.uptime .label {
-  color: #64748b;
-  font-size: 0.9rem;
-}
-
-.uptime .value {
-  color: #1e293b;
-  font-weight: 600;
-  font-size: 0.9rem;
-}
-
-.content {
-  display: flex;
-  flex-direction: column;
-  gap: 30px;
-}
-
-.search-section {
-  padding: 0;
-}
+/* ── Search ── */
+.search-section { }
 
 .search-box {
   display: flex;
-  gap: 12px;
-  max-width: 600px;
+  gap: 10px;
+  max-width: 640px;
 }
 
 .search-input {
   flex: 1;
-  padding: 14px 18px;
-  border: 2px solid #e2e8f0;
-  border-radius: 12px;
-  font-size: 1rem;
+  padding: 12px 16px;
+  border: 1px solid var(--jv-border);
+  border-radius: var(--jv-radius-lg);
+  font-size: 0.95rem;
+  background: var(--jv-bg-surface);
+  color: var(--jv-text-primary);
   outline: none;
-  transition: all 0.2s;
+  transition: border-color var(--jv-duration-fast) var(--jv-ease);
 }
 
+.search-input::placeholder { color: var(--jv-text-muted); }
 .search-input:focus {
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  border-color: var(--jv-border-focus);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--jv-brand) 12%, transparent);
 }
 
 .search-btn {
-  background: #3b82f6;
-  color: white;
+  padding: 12px 22px;
+  background: var(--jv-brand);
+  color: #fff;
   border: none;
-  padding: 14px 24px;
-  border-radius: 12px;
-  font-size: 1rem;
+  border-radius: var(--jv-radius-lg);
+  font-size: 0.95rem;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: background var(--jv-duration-fast) var(--jv-ease), transform var(--jv-duration-fast);
+  white-space: nowrap;
 }
 
-.search-btn:hover {
-  background: #2563eb;
-  transform: translateY(-1px);
-}
+.search-btn:hover { background: var(--jv-brand-hover); transform: translateY(-1px); }
+.search-btn:active { background: var(--jv-brand-pressed); transform: translateY(0); }
 
 .search-hints {
-  margin-top: 12px;
-  font-size: 0.85rem;
-  color: #64748b;
+  margin-top: 10px;
+  font-size: 0.82rem;
+  color: var(--jv-text-muted);
 }
 
-.search-hints .quick-link {
-  color: #3b82f6;
+.quick-link {
+  color: var(--jv-link);
   text-decoration: none;
-  margin-left: 8px;
+  margin-left: 6px;
+}
+.quick-link:hover { text-decoration: underline; color: var(--jv-link-hover); }
+
+/* ── Panel ── */
+.panel {
+  background: var(--jv-bg-surface);
+  border: 1px solid var(--jv-border);
+  border-radius: var(--jv-radius-lg);
+  padding: 20px;
 }
 
-.search-hints .quick-link:hover {
-  text-decoration: underline;
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 18px;
 }
 
-.timelock-info {
-  background: white;
-  border-radius: 16px;
-  padding: 24px;
-  border: 1px solid #e2e8f0;
+.panel-header h2 {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--jv-text-primary);
 }
 
-.timelock-cards {
+.link-btn {
+  background: none;
+  border: none;
+  color: var(--jv-link);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 6px 10px;
+  border-radius: var(--jv-radius-md);
+  transition: background var(--jv-duration-fast) var(--jv-ease);
+}
+.link-btn:hover { background: var(--jv-brand-subtle); }
+
+/* ── Timelock ── */
+.timelock-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 14px;
 }
 
 .timelock-card {
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
+  background: var(--jv-bg-subtle);
+  border: 1px solid var(--jv-border);
+  border-radius: var(--jv-radius-md);
   padding: 16px;
 }
 
-.card-header {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-bottom: 16px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid #e2e8f0;
-}
-
 .card-title {
-  color: #1e293b;
-  font-size: 1.1rem;
+  font-size: 0.95rem;
   font-weight: 600;
-}
-
-.card-address {
-  color: #64748b;
-  font-size: 0.8rem;
-  font-family: 'Courier New', monospace;
+  color: var(--jv-text-primary);
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--jv-border);
 }
 
 .card-stats {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
 }
 
-.stat-item {
+.stat-cell {
   display: flex;
   flex-direction: column;
   gap: 4px;
   padding: 8px;
-  background: white;
-  border-radius: 8px;
-  border: 1px solid #e2e8f0;
+  background: var(--jv-bg-surface);
+  border-radius: var(--jv-radius-md);
+  border: 1px solid var(--jv-border);
 }
 
-.stat-label {
-  color: #64748b;
-  font-size: 0.8rem;
-}
+.stat-label { color: var(--jv-text-muted); font-size: 0.78rem; }
+.stat-value { color: var(--jv-text-primary); font-size: 0.95rem; font-weight: 600; }
+.stat-value.highlight { color: var(--jv-brand); }
 
-.stat-value {
-  color: #1e293b;
-  font-size: 1rem;
-  font-weight: 600;
-}
-
-.stat-value.highlight {
-  color: #3b82f6;
-}
-
-.latest-blocks {
-  background: white;
-  border-radius: 16px;
-  padding: 24px;
-  border: 1px solid #e2e8f0;
-}
-
-.section-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-}
-
-.section-header h2 {
-  color: #1e293b;
-  margin: 0;
-  font-size: 1.5rem;
-  font-weight: 600;
-}
-
-.view-all-btn {
-  background: none;
-  color: #3b82f6;
-  border: none;
-  padding: 8px 16px;
-  border-radius: 8px;
-  font-size: 0.9rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.view-all-btn:hover {
-  background: #eff6ff;
-}
-
-.loading, .empty {
-  padding: 60px 20px;
-  text-align: center;
-  color: #64748b;
-  font-size: 1rem;
-}
-
-.blocks-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
+/* ── Blocks list ── */
+.blocks-list { display: flex; flex-direction: column; gap: 10px; }
 
 .block-card {
-  padding: 16px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
+  padding: 14px 16px;
+  background: var(--jv-bg-subtle);
+  border: 1px solid var(--jv-border);
+  border-radius: var(--jv-radius-md);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: background var(--jv-duration-fast) var(--jv-ease),
+              border-color var(--jv-duration-fast) var(--jv-ease),
+              transform var(--jv-duration-fast) var(--jv-ease);
 }
 
 .block-card:hover {
-  background: #eff6ff;
-  border-color: #3b82f6;
+  background: var(--jv-brand-subtle);
+  border-color: var(--jv-brand);
   transform: translateY(-2px);
 }
 
-.block-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
-}
-
-.block-number {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.block-number .label {
-  color: #64748b;
-  font-size: 0.9rem;
-}
-
-.block-number .value {
-  color: #1e293b;
-  font-size: 1.2rem;
-  font-weight: 600;
-}
-
-.block-age .value {
-  color: #64748b;
-  font-size: 0.9rem;
-}
-
-.block-details {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 8px;
-}
-
-.detail-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.detail-row .label {
-  color: #64748b;
-  font-size: 0.85rem;
-}
-
-.detail-row .value {
-  color: #1e293b;
-  font-size: 0.9rem;
-}
-
-.detail-row .value.hash {
-  font-family: 'Courier New', monospace;
-  color: #3b82f6;
-}
-
-@media (max-width: 768px) {
-  .header {
-    padding: 20px 0;
-  }
-  
-  .logo h1 {
-    font-size: 1.5rem;
-  }
-  
-  .status-bar {
-    flex-direction: column;
-    gap: 12px;
-  }
-  
-  .search-box {
-    max-width: 100%;
-  }
-  
-  .timelock-cards {
-    grid-template-columns: 1fr;
-  }
-  
-  .section-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 12px;
-  }
-  
-  .block-details {
-    grid-template-columns: 1fr;
-  }
-}
-
-/* WebSocket 状态样式 */
-.ws-status {
-  color: var(--jv-success);
-}
-
-/* 新区块高亮样式 */
-.new-block {
+.block-card--new {
   background: var(--jv-success-bg) !important;
   border-color: var(--jv-success) !important;
-  animation: slideIn 0.3s ease-out;
+  animation: slideIn var(--jv-duration-normal) var(--jv-ease) both;
 }
 
 @keyframes slideIn {
-  from {
-    transform: translateY(-10px);
-    opacity: 0;
-  }
-  to {
-    transform: translateY(0);
-    opacity: 1;
-  }
+  from { transform: translateY(-8px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+.block-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.block-num-row { display: flex; align-items: center; gap: 6px; }
+.block-num { font-size: 1.1rem; font-weight: 700; color: var(--jv-text-primary); }
+.block-age-row { display: flex; align-items: center; gap: 6px; }
+.muted { color: var(--jv-text-muted); font-size: 0.85rem; }
+
+.block-card-body {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 6px;
+}
+
+.meta-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.85rem;
+  color: var(--jv-text-secondary);
 }
 
 .new-badge {
   display: inline-block;
-  padding: 2px 8px;
-  margin-right: 6px;
-  background: #22c55e;
-  color: white;
-  font-size: 0.75rem;
-  font-weight: 600;
-  border-radius: 4px;
-  animation: pulse 2s infinite;
+  padding: 2px 7px;
+  background: var(--jv-success);
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  border-radius: var(--jv-radius-sm);
+  animation: pulse 1.8s infinite;
 }
 
 @keyframes pulse {
-  0%, 100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.7;
-  }
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.65; }
+}
+
+@media (max-width: 768px) {
+  .page-header { padding: 18px 0; }
+  .logo-row h1 { font-size: 1.4rem; }
+  .status-bar { gap: 8px; }
+  .search-box { max-width: 100%; }
+  .timelock-grid { grid-template-columns: 1fr; }
+  .block-card-body { grid-template-columns: 1fr; }
 }
 </style>

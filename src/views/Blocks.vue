@@ -1,6 +1,6 @@
 <template>
   <div class="blocks">
-    <div class="header">
+    <div class="page-header">
       <button @click="$router.push('/')" class="back-btn">← 返回首页</button>
       <h1>区块列表</h1>
     </div>
@@ -15,62 +15,63 @@
         >
         <button @click="goToBlock" class="search-btn">跳转</button>
       </div>
-      <button @click="refreshBlocks" class="refresh-btn" :disabled="loading">
-        {{ loading ? '刷新中...' : '刷新' }}
-      </button>
+      <JvActionButton :loading="loading" @click="refreshBlocks">刷新</JvActionButton>
     </div>
 
-    <div class="loading" v-if="loading">加载区块数据中...</div>
+    <JvLoading v-if="loading && blocks.length === 0" label="加载区块数据中..." />
 
-    <div class="blocks-list" v-else-if="blocks.length > 0">
-      <div v-for="(block, index) in blocks" :key="index" class="block-card" @click="$router.push(`/block/${block.number}`)">
-        <div class="block-header">
-          <div class="block-number">
-            <span class="label">区块 #</span>
-            <span class="value">{{ block.number }}</span>
+    <div v-else-if="blocks.length > 0" class="blocks-list">
+      <div
+        v-for="(block, index) in blocks"
+        :key="index"
+        class="block-card"
+        @click="$router.push(`/block/${block.number}`)"
+      >
+        <div class="block-card-head">
+          <div class="num-row">
+            <span class="muted">区块 #</span>
+            <span class="block-num">{{ block.number }}</span>
           </div>
-          <div class="block-age">
-            <span class="value">{{ formatAge(block.timestamp) }}</span>
-          </div>
+          <span class="muted">{{ formatAge(block.timestamp) }}</span>
         </div>
-
-        <div class="block-details">
-          <div class="detail-row">
-            <span class="label">区块哈希</span>
-            <span class="value hash">{{ formatHash(block.hash) }}</span>
+        <div class="block-card-body">
+          <div class="meta-row">
+            <span class="muted">区块哈希</span>
+            <JvHashText :value="block.hash" type="block" :truncate="8" :linkable="false" />
           </div>
-          <div class="detail-row">
-            <span class="label">交易数</span>
-            <span class="value">{{ block.transactions.length }}</span>
+          <div class="meta-row">
+            <span class="muted">交易数</span>
+            <span>{{ block.transactions.length }}</span>
           </div>
-          <div class="detail-row">
-            <span class="label">Gas 使用</span>
-            <span class="value">{{ formatNumber(block.gasUsed) }}</span>
+          <div class="meta-row">
+            <span class="muted">Gas 使用</span>
+            <span>{{ formatNumber(block.gasUsed) }}</span>
           </div>
-          <div class="detail-row">
-            <span class="label">矿工</span>
-            <span class="value hash" @click.stop="$router.push(`/address/${block.miner}`)">{{ formatHash(block.miner) }}</span>
+          <div class="meta-row">
+            <span class="muted">矿工</span>
+            <JvHashText
+              :value="block.miner"
+              type="address"
+              :truncate="8"
+              @click.stop="$router.push(`/address/${block.miner}`)"
+            />
           </div>
         </div>
       </div>
     </div>
 
-    <div class="pagination" v-if="!loading">
-      <button 
-        @click="loadPreviousPage" 
-        :disabled="currentPage === 1 || loading"
+    <div v-if="!loading" class="pagination">
+      <button
+        @click="loadPreviousPage"
+        :disabled="currentPage === 1"
         class="page-btn"
-      >
-        上一页
-      </button>
+      >← 上一页</button>
       <span class="page-info">第 {{ currentPage }} 页</span>
-      <button 
-        @click="loadNextPage" 
+      <button
+        @click="loadNextPage"
         :disabled="loading"
         class="page-btn"
-      >
-        下一页
-      </button>
+      >下一页 →</button>
     </div>
   </div>
 </template>
@@ -78,8 +79,9 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { formatUnits } from 'viem'
+import { formatAge, formatNumber } from '../utils/format'
 import { publicClient } from '../config/client'
+import { JvLoading, JvHashText, JvActionButton } from '../design-system'
 
 const router = useRouter()
 
@@ -98,84 +100,50 @@ const searchBlockNumber = ref('')
 const currentPage = ref(1)
 const pageSize = 20
 
-const formatAge = (timestamp: bigint): string => {
-  const blockTime = Number(timestamp) * 1000
-  const now = Date.now()
-  const diff = Math.floor((now - blockTime) / 1000)
-  
-  if (diff < 60) return `${diff} 秒前`
-  if (diff < 3600) return `${Math.floor(diff / 60)} 分钟前`
-  if (diff < 86400) return `${Math.floor(diff / 3600)} 小时前`
-  return `${Math.floor(diff / 86400)} 天前`
-}
-
-const formatHash = (hash: string): string => {
-  if (!hash) return ''
-  return `${hash.substring(0, 10)}...${hash.substring(hash.length - 8)}`
-}
-
-const formatNumber = (num: bigint): string => {
-  return formatUnits(num, 0)
-}
 
 const goToBlock = () => {
-  const blockNum = parseInt(searchBlockNumber.value)
-  if (!isNaN(blockNum) && blockNum > 0) {
-    router.push(`/block/${blockNum}`)
-  }
+  const n = parseInt(searchBlockNumber.value)
+  if (!isNaN(n) && n > 0) router.push(`/block/${n}`)
 }
 
-const refreshBlocks = async () => {
-  await loadPage(currentPage.value)
-}
+const refreshBlocks = () => loadPage(currentPage.value)
 
 const loadPage = async (page: number) => {
   loading.value = true
   try {
-    const latestBlock = await publicClient.getBlockNumber()
-    const startBlock = latestBlock - BigInt((page - 1) * pageSize)
-    
-    const newBlocks: Block[] = []
+    const latest = await publicClient.getBlockNumber()
+    const start = latest - BigInt((page - 1) * pageSize)
+    const fetched: Block[] = []
     for (let i = 0; i < pageSize; i++) {
-      const blockNumber = startBlock - BigInt(i)
-      if (blockNumber < 0n) break
-      
-      const block = await publicClient.getBlock({
-        blockNumber,
-      })
-      newBlocks.push({
-        number: block.number,
-        hash: block.hash || '',
-        timestamp: block.timestamp,
-        transactions: block.transactions,
-        gasUsed: block.gasUsed,
-        miner: block.miner,
+      const n = start - BigInt(i)
+      if (n < 0n) break
+      const b = await publicClient.getBlock({ blockNumber: n })
+      fetched.push({
+        number: b.number,
+        hash: b.hash || '',
+        timestamp: b.timestamp,
+        transactions: b.transactions,
+        gasUsed: b.gasUsed,
+        miner: b.miner,
       })
     }
-    
-    blocks.value = newBlocks
-  } catch (error) {
-    console.error('Failed to fetch blocks:', error)
+    blocks.value = fetched
+  } catch (e) {
+    console.error('Failed to fetch blocks:', e)
   } finally {
     loading.value = false
   }
 }
 
 const loadPreviousPage = async () => {
-  if (currentPage.value > 1) {
-    currentPage.value--
-    await loadPage(currentPage.value)
-  }
+  if (currentPage.value > 1) { currentPage.value--; await loadPage(currentPage.value) }
 }
 
 const loadNextPage = async () => {
-  currentPage.value++
-  await loadPage(currentPage.value)
+  currentPage.value++; await loadPage(currentPage.value)
 }
 
-onMounted(() => {
-  loadPage(1)
-})
+onMounted(() => loadPage(1))
 </script>
 
 <style scoped>
@@ -185,93 +153,68 @@ onMounted(() => {
   padding: 20px;
 }
 
-.header {
-  margin-bottom: 30px;
-}
+.page-header { margin-bottom: 24px; }
 
 .back-btn {
-  background: #f1f5f9;
-  color: #64748b;
+  background: var(--jv-bg-subtle);
+  color: var(--jv-text-muted);
   border: none;
   padding: 8px 16px;
-  border-radius: 6px;
+  border-radius: var(--jv-radius-md);
   cursor: pointer;
-  margin-bottom: 20px;
+  margin-bottom: 16px;
   display: inline-block;
+  transition: background var(--jv-duration-fast) var(--jv-ease);
 }
+.back-btn:hover { background: var(--jv-bg-hover); }
 
-.back-btn:hover {
-  background: #e2e8f0;
-}
-
-.header h1 {
-  color: #1e293b;
-  margin: 0;
-}
+.page-header h1 { color: var(--jv-text-primary); margin: 0; }
 
 .controls {
   display: flex;
-  gap: 12px;
+  gap: 10px;
   margin-bottom: 20px;
   flex-wrap: wrap;
+  align-items: center;
 }
 
 .search-box {
   display: flex;
   gap: 8px;
   flex: 1;
-  min-width: 300px;
+  min-width: 280px;
 }
 
 .search-input {
   flex: 1;
-  padding: 10px 14px;
-  border: 2px solid #e2e8f0;
-  border-radius: 6px;
+  padding: 9px 14px;
+  border: 1px solid var(--jv-border);
+  border-radius: var(--jv-radius-md);
   font-size: 0.9rem;
+  background: var(--jv-bg-surface);
+  color: var(--jv-text-primary);
   outline: none;
+  transition: border-color var(--jv-duration-fast) var(--jv-ease);
 }
 
 .search-input:focus {
-  border-color: #3b82f6;
+  border-color: var(--jv-border-focus);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--jv-brand) 12%, transparent);
 }
 
 .search-btn {
-  background: #3b82f6;
-  color: white;
+  padding: 9px 16px;
+  background: var(--jv-brand);
+  color: #fff;
   border: none;
-  padding: 10px 16px;
-  border-radius: 6px;
+  border-radius: var(--jv-radius-md);
+  font-size: 0.9rem;
+  font-weight: 600;
   cursor: pointer;
+  transition: background var(--jv-duration-fast) var(--jv-ease);
+  white-space: nowrap;
 }
-
-.search-btn:hover {
-  background: #2563eb;
-}
-
-.refresh-btn {
-  background: #64748b;
-  color: white;
-  border: none;
-  padding: 10px 16px;
-  border-radius: 6px;
-  cursor: pointer;
-}
-
-.refresh-btn:hover:not(:disabled) {
-  background: #475569;
-}
-
-.refresh-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.loading {
-  padding: 60px 20px;
-  text-align: center;
-  color: #64748b;
-}
+.search-btn:hover { background: var(--jv-brand-hover); }
 
 .blocks-list {
   display: flex;
@@ -281,102 +224,74 @@ onMounted(() => {
 }
 
 .block-card {
-  padding: 16px;
-  background: white;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
+  padding: 14px 16px;
+  background: var(--jv-bg-surface);
+  border: 1px solid var(--jv-border);
+  border-radius: var(--jv-radius-md);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: background var(--jv-duration-fast) var(--jv-ease),
+              border-color var(--jv-duration-fast) var(--jv-ease);
 }
 
 .block-card:hover {
-  background: #f8fafc;
-  border-color: #3b82f6;
+  background: var(--jv-brand-subtle);
+  border-color: var(--jv-brand);
 }
 
-.block-header {
+.block-card-head {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 
-.block-number .label {
-  color: #64748b;
-  font-size: 0.9rem;
-}
+.num-row { display: flex; align-items: center; gap: 4px; }
+.block-num { font-size: 1.1rem; font-weight: 700; color: var(--jv-text-primary); }
 
-.block-number .value {
-  color: #1e293b;
-  font-size: 1.2rem;
-  font-weight: 600;
-  margin-left: 4px;
-}
-
-.block-age .value {
-  color: #64748b;
-  font-size: 0.9rem;
-}
-
-.block-details {
+.block-card-body {
   display: grid;
-  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 6px;
 }
 
-.detail-row {
+.meta-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  font-size: 0.85rem;
+  color: var(--jv-text-secondary);
 }
 
-.detail-row .label {
-  color: #64748b;
-  font-size: 0.9rem;
-}
-
-.detail-row .value {
-  color: #1e293b;
-  font-size: 0.9rem;
-}
-
-.detail-row .value.hash {
-  font-family: 'Courier New', monospace;
-  color: #3b82f6;
-  cursor: pointer;
-}
-
-.detail-row .value.hash:hover {
-  text-decoration: underline;
-}
+.muted { color: var(--jv-text-muted); font-size: 0.85rem; }
 
 .pagination {
   display: flex;
   justify-content: center;
   align-items: center;
-  gap: 12px;
-  padding: 20px;
+  gap: 16px;
+  padding: 20px 0;
 }
 
 .page-btn {
-  background: #3b82f6;
-  color: white;
-  border: none;
-  padding: 8px 16px;
-  border-radius: 6px;
+  background: var(--jv-bg-subtle);
+  color: var(--jv-text-secondary);
+  border: 1px solid var(--jv-border);
+  padding: 8px 18px;
+  border-radius: var(--jv-radius-md);
+  font-size: 0.875rem;
+  font-weight: 500;
   cursor: pointer;
+  transition: background var(--jv-duration-fast) var(--jv-ease),
+              border-color var(--jv-duration-fast) var(--jv-ease);
 }
 
 .page-btn:hover:not(:disabled) {
-  background: #2563eb;
+  background: var(--jv-brand-subtle);
+  border-color: var(--jv-brand);
+  color: var(--jv-brand);
 }
 
-.page-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
+.page-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
-.page-info {
-  color: #64748b;
-  font-size: 0.9rem;
-}
+.page-info { color: var(--jv-text-muted); font-size: 0.875rem; }
 </style>

@@ -1,13 +1,14 @@
 import type { GlobalThemeOverrides } from 'naive-ui'
 
 /* Jouleverse 品牌主题 — 覆盖 Naive UI 默认变量，强化品牌感 */
+/* 主色：蓝色（#2563EB）；红色仅保留在 logo / JvLoading 硬编码处 */
 
 export const jvLightTheme: GlobalThemeOverrides = {
   common: {
-    primaryColor:        '#EB1727',
-    primaryColorHover:   '#D41422',
-    primaryColorPressed: '#B91C1C',
-    primaryColorSuppl:   '#FEF2F2',
+    primaryColor:        '#2563EB',
+    primaryColorHover:   '#1D4ED8',
+    primaryColorPressed: '#1E40AF',
+    primaryColorSuppl:   '#EFF6FF',
 
     bodyColor:           '#F8FAFC',
     cardColor:           '#FFFFFF',
@@ -37,10 +38,10 @@ export const jvLightTheme: GlobalThemeOverrides = {
     infoColor:           '#2563EB',
   },
   Button: {
-    colorPrimary:            '#EB1727',
-    colorHoverPrimary:       '#D41422',
-    colorPressedPrimary:     '#B91C1C',
-    colorFocusPrimary:       '#D41422',
+    colorPrimary:            '#2563EB',
+    colorHoverPrimary:       '#1D4ED8',
+    colorPressedPrimary:     '#1E40AF',
+    colorFocusPrimary:       '#1D4ED8',
     textColorPrimary:        '#FFFFFF',
     textColorHoverPrimary:   '#FFFFFF',
     textColorPressedPrimary: '#FFFFFF',
@@ -62,18 +63,18 @@ export const jvLightTheme: GlobalThemeOverrides = {
     fontSizeMedium:    '13px',
   },
   Input: {
-    borderHover:  '1px solid #EB1727',
-    borderFocus:  '1px solid #EB1727',
-    boxShadowFocus: '0 0 0 2px rgba(235, 23, 39, 0.15)',
+    borderHover:    '1px solid #2563EB',
+    borderFocus:    '1px solid #2563EB',
+    boxShadowFocus: '0 0 0 2px rgba(37, 99, 235, 0.15)',
   },
 }
 
 export const jvDarkTheme: GlobalThemeOverrides = {
   common: {
-    primaryColor:        '#EB1727',
-    primaryColorHover:   '#D41422',
-    primaryColorPressed: '#B91C1C',
-    primaryColorSuppl:   '#3B0D0E',
+    primaryColor:        '#3B82F6',
+    primaryColorHover:   '#60A5FA',
+    primaryColorPressed: '#2563EB',
+    primaryColorSuppl:   '#1E3A5F',
 
     bodyColor:           '#0E0F12',
     cardColor:           '#17191D',
@@ -103,9 +104,9 @@ export const jvDarkTheme: GlobalThemeOverrides = {
     infoColor:           '#60A5FA',
   },
   Button: {
-    colorPrimary:            '#EB1727',
-    colorHoverPrimary:       '#D41422',
-    colorPressedPrimary:     '#B91C1C',
+    colorPrimary:            '#3B82F6',
+    colorHoverPrimary:       '#60A5FA',
+    colorPressedPrimary:     '#2563EB',
     textColorPrimary:        '#FFFFFF',
     textColorHoverPrimary:   '#FFFFFF',
     textColorPressedPrimary: '#FFFFFF',
@@ -127,8 +128,8 @@ export const jvDarkTheme: GlobalThemeOverrides = {
     fontSizeMedium: '13px',
   },
   Input: {
-    borderHover:    '1px solid #EB1727',
-    borderFocus:    '1px solid #EB1727',
-    boxShadowFocus: '0 0 0 2px rgba(235, 23, 39, 0.20)',
+    borderHover:    '1px solid #3B82F6',
+    borderFocus:    '1px solid #3B82F6',
+    boxShadowFocus: '0 0 0 2px rgba(59, 130, 246, 0.20)',
   },
 }

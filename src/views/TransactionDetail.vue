@@ -13,19 +13,15 @@
         <div class="info-grid">
           <div class="info-item">
             <span class="label">交易哈希</span>
-            <span class="value hash">{{ transaction.hash }}</span>
+            <JvHashText :value="transaction.hash" type="tx" :truncate="12" :linkable="false" />
           </div>
           <div class="info-item">
             <span class="label">状态</span>
-            <span class="value" :class="{ success: transaction.status === 'success', error: transaction.status === 'reverted' }">
-              {{ transaction.status === 'success' ? '成功' : '失败' }}
-            </span>
+            <JvStatusTag :status="transaction.status === 'success' ? 'tx-success' : 'tx-failed'" />
           </div>
           <div class="info-item">
             <span class="label">区块</span>
-            <span class="value" @click="$router.push(`/block/${transaction.blockNumber}`)">
-              #{{ transaction.blockNumber }}
-            </span>
+            <JvHashText :value="String(transaction.blockNumber)" type="block" :truncate="0" />
           </div>
           <div class="info-item">
             <span class="label">时间戳</span>
@@ -33,21 +29,20 @@
           </div>
           <div class="info-item">
             <span class="label">发送方</span>
-            <span class="value hash" @click="$router.push(`/address/${transaction.from}`)">{{ transaction.from }}</span>
+            <JvHashText :value="transaction.from" type="address" :truncate="8" />
           </div>
           <div class="info-item">
             <span class="label">接收方</span>
-            <span class="value hash" @click="$router.push(`/address/${transaction.to}`)">
-              {{ transaction.to || '合约创建' }}
-            </span>
+            <JvHashText v-if="transaction.to" :value="transaction.to" type="address" :truncate="8" />
+            <span v-else class="value">合约创建</span>
           </div>
           <div class="info-item">
             <span class="label">发送金额</span>
-            <span class="value">{{ formatValue(transaction.value) }} {{ symbol }}</span>
+            <JvAmount :value="transaction.value" unit="J" />
           </div>
           <div class="info-item" v-if="transaction.gasPrice">
             <span class="label">Gas 价格</span>
-            <span class="value">{{ formatGas(transaction.gasPrice) }} Gwei</span>
+            <JvAmount :value="transaction.gasPrice" :decimals="9" unit="Gwei" :maxDecimals="4" />
           </div>
           <div class="info-item">
             <span class="label">Gas 限制</span>
@@ -58,32 +53,34 @@
             <span class="value">{{ formatNumber(transaction.gasUsed || 0) }}</span>
           </div>
           <div class="info-item">
-            <span class="label">Gas 费用</span>
-            <span class="value">{{ formatValue(transaction.gasUsed || 0n * (transaction.gasPrice || 0n)) }} {{ symbol }}</span>
-          </div>
-          <div class="info-item">
             <span class="label">随机数</span>
             <span class="value">{{ transaction.nonce }}</span>
           </div>
           <div class="info-item">
             <span class="label">输入数据</span>
-            <span class="value hash">{{ formatInput(transaction.input) }}</span>
+            <span class="value mono">{{ formatInput(transaction.input) }}</span>
           </div>
         </div>
       </div>
     </div>
 
-    <div v-else-if="!loading" class="error">
-      <p>未找到交易: {{ txHash }}</p>
-      <button @click="$router.push('/')" class="btn-primary">返回首页</button>
+    <div v-else-if="!loading" class="error-section">
+      <JvPageState
+        type="network-error"
+        title="交易未找到"
+        :description="`找不到交易: ${txHash}`"
+        action="返回首页"
+        @action="$router.push('/')"
+      />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { formatUnits, formatEther } from 'viem'
 import { publicClient } from '../config/client'
+import { formatNumber } from '../utils/format'
+import { JvHashText, JvStatusTag, JvAmount, JvPageState } from '../design-system'
 
 interface Props {
   hash: string
@@ -94,31 +91,15 @@ const props = defineProps<Props>()
 const transaction = ref<any>(null)
 const loading = ref(true)
 const txHash = ref(props.hash)
-const symbol = ref('J')
 
 const formatTimestamp = (timestamp: bigint): string => {
   const date = new Date(Number(timestamp) * 1000)
   return date.toLocaleString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
   })
 }
 
-const formatValue = (value: bigint): string => {
-  return formatEther(value)
-}
-
-const formatGas = (gas: bigint): string => {
-  return formatUnits(gas, 9)
-}
-
-const formatNumber = (num: bigint): string => {
-  return formatUnits(num, 0)
-}
 
 const formatInput = (input: string): string => {
   if (!input || input === '0x') return '无'
@@ -129,23 +110,12 @@ const formatInput = (input: string): string => {
 const loadTransaction = async () => {
   loading.value = true
   try {
-    const txData = await publicClient.getTransaction({
-      hash: props.hash as `0x${string}`,
-    })
-    
-    const receipt = await publicClient.getTransactionReceipt({
-      hash: props.hash as `0x${string}`,
-    })
-    
-    const block = await publicClient.getBlock({
-      blockNumber: txData.blockNumber!,
-    })
-    
-    transaction.value = {
-      ...txData,
-      ...receipt,
-      blockTimestamp: block.timestamp,
-    }
+    const [txData, receipt] = await Promise.all([
+      publicClient.getTransaction({ hash: props.hash as `0x${string}` }),
+      publicClient.getTransactionReceipt({ hash: props.hash as `0x${string}` }),
+    ])
+    const block = await publicClient.getBlock({ blockNumber: txData.blockNumber! })
+    transaction.value = { ...txData, ...receipt, blockTimestamp: block.timestamp }
   } catch (error) {
     console.error('Failed to fetch transaction:', error)
     transaction.value = null
@@ -154,9 +124,7 @@ const loadTransaction = async () => {
   }
 }
 
-onMounted(() => {
-  loadTransaction()
-})
+onMounted(() => { loadTransaction() })
 </script>
 
 <style scoped>
@@ -166,113 +134,71 @@ onMounted(() => {
   padding: 20px;
 }
 
-.header {
-  margin-bottom: 30px;
-}
+.header { margin-bottom: 30px; }
 
 .back-btn {
-  background: #f1f5f9;
-  color: #64748b;
+  background: var(--jv-bg-subtle);
+  color: var(--jv-text-muted);
   border: none;
   padding: 8px 16px;
-  border-radius: 6px;
+  border-radius: var(--jv-radius-md);
   cursor: pointer;
   margin-bottom: 20px;
   display: inline-block;
+  transition: background var(--jv-duration-fast) var(--jv-ease);
 }
+.back-btn:hover { background: var(--jv-bg-hover); }
 
-.back-btn:hover {
-  background: #e2e8f0;
-}
+.header h1 { color: var(--jv-text-primary); margin: 0; }
 
-.header h1 {
-  color: #1e293b;
-  margin: 0;
-}
-
-.transaction-info {
-  display: flex;
-  flex-direction: column;
-  gap: 30px;
-}
+.transaction-info { display: flex; flex-direction: column; gap: 30px; }
 
 .info-section {
-  background: white;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
+  background: var(--jv-bg-surface);
+  border: 1px solid var(--jv-border);
+  border-radius: var(--jv-radius-lg);
   padding: 20px;
 }
 
 .info-section h2 {
-  color: #1e293b;
+  color: var(--jv-text-primary);
   margin: 0 0 20px 0;
   font-size: 1.25rem;
 }
 
-.info-grid {
-  display: grid;
-  gap: 16px;
-}
+.info-grid { display: grid; gap: 16px; }
 
 .info-item {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: center;
   padding: 12px;
-  background: #f8fafc;
-  border-radius: 6px;
+  background: var(--jv-bg-subtle);
+  border-radius: var(--jv-radius-md);
 }
 
 .info-item .label {
-  color: #64748b;
+  color: var(--jv-text-muted);
   font-size: 0.9rem;
   min-width: 200px;
 }
 
 .info-item .value {
-  color: #1e293b;
+  color: var(--jv-text-primary);
   font-size: 0.9rem;
   word-break: break-all;
   max-width: 70%;
 }
 
-.info-item .value.hash {
-  font-family: 'Courier New', monospace;
-  color: #3b82f6;
-  cursor: pointer;
+.info-item .value.mono {
+  font-family: var(--jv-font-mono);
+  color: var(--jv-text-secondary);
 }
 
-.info-item .value.hash:hover {
-  text-decoration: underline;
-}
-
-.info-item .value.success {
-  color: #10b981;
-  font-weight: 600;
-}
-
-.info-item .value.error {
-  color: #ef4444;
-  font-weight: 600;
-}
-
-.error {
-  text-align: center;
-  padding: 60px 20px;
-  color: #ef4444;
-}
-
-.btn-primary {
-  background: #3b82f6;
-  color: white;
-  border: none;
-  padding: 10px 20px;
-  border-radius: 6px;
-  cursor: pointer;
-  margin-top: 20px;
-}
-
-.btn-primary:hover {
-  background: #2563eb;
+.error-section {
+  background: var(--jv-bg-surface);
+  border: 1px solid var(--jv-border);
+  border-radius: var(--jv-radius-lg);
+  padding: 40px;
 }
 </style>

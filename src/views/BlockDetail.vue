@@ -17,11 +17,11 @@
           </div>
           <div class="info-item">
             <span class="label">区块哈希</span>
-            <span class="value hash">{{ block.hash }}</span>
+            <JvHashText :value="block.hash" type="block" :truncate="12" :linkable="false" />
           </div>
           <div class="info-item">
             <span class="label">父区块哈希</span>
-            <span class="value hash">{{ block.parentHash }}</span>
+            <JvHashText :value="block.parentHash" type="block" :truncate="12" :linkable="false" />
           </div>
           <div class="info-item">
             <span class="label">时间戳</span>
@@ -29,7 +29,7 @@
           </div>
           <div class="info-item">
             <span class="label">矿工</span>
-            <span class="value hash" @click="$router.push(`/address/${block.miner}`)">{{ block.miner }}</span>
+            <JvHashText :value="block.miner" type="address" :truncate="8" />
           </div>
           <div class="info-item">
             <span class="label">Gas 限制</span>
@@ -73,19 +73,24 @@
           >
             <div class="tx-header">
               <span class="tx-index">#{{ index }}</span>
-              <span class="tx-hash">{{ formatHash(tx) }}</span>
+              <JvHashText :value="tx" type="tx" :truncate="8" :linkable="false" />
             </div>
           </div>
         </div>
       </div>
       <div class="empty-section" v-else>
-        <p>此区块没有交易</p>
+        <JvPageState type="empty" title="此区块没有交易" />
       </div>
     </div>
 
-    <div v-else-if="!loading" class="error">
-      <p>未找到区块 #{{ blockNumber }}</p>
-      <button @click="$router.push('/')" class="btn-primary">返回首页</button>
+    <div v-else-if="!loading" class="error-section">
+      <JvPageState
+        type="network-error"
+        :title="`未找到区块 #${blockNumber}`"
+        description="区块数据不存在或加载失败，请检查区块号是否正确。"
+        action="返回首页"
+        @action="$router.push('/')"
+      />
     </div>
   </div>
 </template>
@@ -93,8 +98,9 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { formatUnits } from 'viem'
 import { publicClient } from '../config/client'
+import { formatNumber } from '../utils/format'
+import { JvHashText, JvPageState } from '../design-system'
 
 const router = useRouter()
 
@@ -111,43 +117,24 @@ const blockNumber = ref(props.number)
 const formatTimestamp = (timestamp: bigint): string => {
   const date = new Date(Number(timestamp) * 1000)
   return date.toLocaleString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
   })
 }
 
-const formatHash = (hash: string): string => {
-  if (!hash) return ''
-  return `${hash.substring(0, 10)}...${hash.substring(hash.length - 8)}`
-}
 
-const formatNumber = (num: bigint): string => {
-  return formatUnits(num, 0)
-}
+const calculateGasUsed = (used: bigint, limit: bigint): number =>
+  Math.round((Number(used) / Number(limit)) * 100)
 
-const calculateGasUsed = (used: bigint, limit: bigint): number => {
-  const usedNum = Number(used)
-  const limitNum = Number(limit)
-  return Math.round((usedNum / limitNum) * 100)
-}
-
-const viewTransaction = (txHash: string) => {
-  router.push(`/tx/${txHash}`)
-}
+const viewTransaction = (txHash: string) => router.push(`/tx/${txHash}`)
 
 const loadBlock = async () => {
   loading.value = true
   try {
-    const blockNum = BigInt(props.number)
-    const blockData = await publicClient.getBlock({
-      blockNumber: blockNum,
+    block.value = await publicClient.getBlock({
+      blockNumber: BigInt(props.number),
       includeTransactions: true,
     })
-    block.value = blockData
   } catch (error) {
     console.error('Failed to fetch block:', error)
     block.value = null
@@ -156,9 +143,7 @@ const loadBlock = async () => {
   }
 }
 
-onMounted(() => {
-  loadBlock()
-})
+onMounted(() => { loadBlock() })
 </script>
 
 <style scoped>
@@ -173,98 +158,69 @@ onMounted(() => {
 }
 
 .back-btn {
-  background: #f1f5f9;
-  color: #64748b;
+  background: var(--jv-bg-subtle);
+  color: var(--jv-text-muted);
   border: none;
   padding: 8px 16px;
-  border-radius: 6px;
+  border-radius: var(--jv-radius-md);
   cursor: pointer;
   margin-bottom: 20px;
   display: inline-block;
+  transition: background var(--jv-duration-fast) var(--jv-ease);
 }
+.back-btn:hover { background: var(--jv-bg-hover); }
 
-.back-btn:hover {
-  background: #e2e8f0;
-}
+.header h1 { color: var(--jv-text-primary); margin: 0; }
 
-.header h1 {
-  color: #1e293b;
-  margin: 0;
-}
-
-.block-info {
-  display: flex;
-  flex-direction: column;
-  gap: 30px;
-}
+.block-info { display: flex; flex-direction: column; gap: 30px; }
 
 .info-section, .transactions-section {
-  background: white;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
+  background: var(--jv-bg-surface);
+  border: 1px solid var(--jv-border);
+  border-radius: var(--jv-radius-lg);
   padding: 20px;
 }
 
 .info-section h2, .transactions-section h2 {
-  color: #1e293b;
+  color: var(--jv-text-primary);
   margin: 0 0 20px 0;
   font-size: 1.25rem;
 }
 
-.info-grid {
-  display: grid;
-  gap: 16px;
-}
+.info-grid { display: grid; gap: 16px; }
 
 .info-item {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: center;
   padding: 12px;
-  background: #f8fafc;
-  border-radius: 6px;
+  background: var(--jv-bg-subtle);
+  border-radius: var(--jv-radius-md);
 }
 
 .info-item .label {
-  color: #64748b;
+  color: var(--jv-text-muted);
   font-size: 0.9rem;
   min-width: 200px;
 }
 
 .info-item .value {
-  color: #1e293b;
+  color: var(--jv-text-primary);
   font-size: 0.9rem;
   word-break: break-all;
   max-width: 70%;
 }
 
-.info-item .value.hash {
-  font-family: 'Courier New', monospace;
-  color: #3b82f6;
-  cursor: pointer;
-}
-
-.info-item .value.hash:hover {
-  text-decoration: underline;
-}
-
-.transactions-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
+.transactions-list { display: flex; flex-direction: column; gap: 8px; }
 
 .transaction-item {
   padding: 12px;
-  background: #f8fafc;
-  border-radius: 6px;
+  background: var(--jv-bg-subtle);
+  border-radius: var(--jv-radius-md);
   cursor: pointer;
-  transition: background 0.2s;
+  transition: background var(--jv-duration-fast) var(--jv-ease);
 }
-
-.transaction-item:hover {
-  background: #e2e8f0;
-}
+.transaction-item:hover { background: var(--jv-bg-hover); }
 
 .tx-header {
   display: flex;
@@ -273,43 +229,15 @@ onMounted(() => {
 }
 
 .tx-index {
-  color: #64748b;
+  color: var(--jv-text-muted);
   font-size: 0.85rem;
   font-weight: 600;
 }
 
-.tx-hash {
-  font-family: 'Courier New', monospace;
-  color: #3b82f6;
-  font-size: 0.9rem;
-}
-
-.empty-section {
-  background: white;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
+.empty-section, .error-section {
+  background: var(--jv-bg-surface);
+  border: 1px solid var(--jv-border);
+  border-radius: var(--jv-radius-lg);
   padding: 40px;
-  text-align: center;
-  color: #64748b;
-}
-
-.error {
-  text-align: center;
-  padding: 60px 20px;
-  color: #ef4444;
-}
-
-.btn-primary {
-  background: #3b82f6;
-  color: white;
-  border: none;
-  padding: 10px 20px;
-  border-radius: 6px;
-  cursor: pointer;
-  margin-top: 20px;
-}
-
-.btn-primary:hover {
-  background: #2563eb;
 }
 </style>

@@ -216,8 +216,8 @@ export function useCheckinStats() {
       if (currentMonthKey.value) {
         currentMonthIntegrity.value = checkIntegrity(currentMonthKey.value)
       }
-    } catch (err) {
-      error.value = err instanceof Error ? err.message : String(err)
+    } catch {
+      // retryFailed 是后台静默重试，失败不影响已有数据展示
     } finally {
       isLoading.value = false
     }
@@ -417,7 +417,10 @@ export function useCheckinStats() {
         isAutoLoadingForCurrent = false
       }
     } catch (err) {
-      error.value = err instanceof Error ? err.message : String(err)
+      // 已有数据时静默失败，不覆盖已渲染内容；初次加载无数据时才显示错误
+      if (!currentMonthKey.value) {
+        error.value = err instanceof Error ? err.message : String(err)
+      }
     } finally {
       isLoading.value = false
     }

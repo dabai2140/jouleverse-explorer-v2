@@ -1,18 +1,16 @@
 <template>
   <div class="core-id-section">
-    <div v-if="isLoading" class="loading-state">⏳ 加载中...</div>
-    <div v-else-if="error" class="error-message">{{ error }}</div>
+    <JvLoading v-if="isLoading" label="Core ID 加载中..." />
+    <JvPageState v-else-if="error" type="network-error" :description="error" />
     <template v-else>
-      <div v-if="coreId === null" class="empty-state">该地址尚未拥有 Core ID。</div>
+      <JvPageState v-if="coreId === null" type="no-core-id" />
 
       <template v-else>
         <div class="core-id-card">
           <img v-if="metadata?.image" :src="metadata.image" :alt="metadata?.name" class="core-id-avatar" />
           <div class="core-id-info">
             <div class="core-id-title">Core ID #{{ coreId.toString() }}</div>
-            <div class="core-id-status" :class="{ live: metadata?.liveness, expired: !metadata?.liveness }">
-              {{ metadata?.liveness ? '活跃' : '已过期' }}
-            </div>
+            <JvStatusTag :status="metadata?.liveness ? 'active' : 'expired'" />
           </div>
         </div>
 
@@ -29,16 +27,21 @@
       <div class="pop-history">
         <h3>签到徽章历史</h3>
         <div v-if="popHistory.length === 0" class="empty-state">暂无签到记录</div>
-        <div v-else class="pop-badge-list">
-          <div
-            v-for="entry in popHistory"
-            :key="entry.tokenId.toString()"
-            class="pop-badge"
-            :class="{ invalid: !entry.isValid }"
-          >
-            <img :src="entry.metadata?.image" :alt="entry.metadata?.name" class="pop-badge-img" />
-            <div class="pop-month">{{ entry.monthLabel }}</div>
+        <div v-else>
+          <div class="pop-badge-list">
+            <div
+              v-for="entry in popHistory"
+              :key="entry.tokenId.toString()"
+              class="pop-badge"
+              :class="{ invalid: !entry.isValid }"
+            >
+              <img :src="entry.metadata?.image" :alt="entry.metadata?.name" class="pop-badge-img" />
+              <div class="pop-month">{{ entry.monthLabel }}</div>
+            </div>
           </div>
+          <p v-if="popHistoryTruncated" class="pop-truncated-hint">
+            仅显示最近 {{ popHistory.length }} 条，共 {{ popHistoryTotal }} 条
+          </p>
         </div>
       </div>
     </template>
@@ -49,6 +52,7 @@
 import { computed, onMounted } from 'vue'
 import { useCoreId } from '../composables/useCoreId'
 import CoreIdCheckIn from './CoreIdCheckIn.vue'
+import { JvLoading, JvPageState, JvStatusTag } from '../design-system'
 
 interface Props {
   address: string
@@ -57,7 +61,7 @@ interface Props {
 
 const props = defineProps<Props>()
 
-const { coreIds, popHistory, isLoading, error, load } = useCoreId(props.address)
+const { coreIds, popHistory, popHistoryTotal, popHistoryTruncated, isLoading, error, load } = useCoreId(props.address)
 
 const coreId = computed(() => (coreIds.value.length > 0 ? coreIds.value[0].tokenId : null))
 const metadata = computed(() => (coreIds.value.length > 0 ? coreIds.value[0].metadata : null))
@@ -74,28 +78,13 @@ onMounted(() => {
   gap: 20px;
 }
 
-.loading-state {
-  color: #64748b;
-}
-
-.empty-state {
-  color: #94a3b8;
-  font-size: 0.9rem;
-  padding: 12px 0;
-}
-
-.error-message {
-  color: #ef4444;
-  font-size: 0.9rem;
-}
-
 .core-id-card {
   display: flex;
   align-items: center;
   gap: 16px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
+  background: var(--jv-bg-subtle);
+  border: 1px solid var(--jv-border);
+  border-radius: var(--jv-radius-lg);
   padding: 16px;
 }
 
@@ -116,32 +105,13 @@ onMounted(() => {
 .core-id-title {
   font-size: 1.1rem;
   font-weight: 600;
-  color: #1e293b;
-}
-
-.core-id-status {
-  display: inline-block;
-  width: fit-content;
-  font-size: 0.85rem;
-  font-weight: 600;
-  padding: 2px 10px;
-  border-radius: 999px;
-}
-
-.core-id-status.live {
-  background: #dcfce7;
-  color: #15803d;
-}
-
-.core-id-status.expired {
-  background: #fee2e2;
-  color: #b91c1c;
+  color: var(--jv-text-primary);
 }
 
 .pop-history h3 {
   margin: 0 0 12px 0;
   font-size: 1rem;
-  color: #1e293b;
+  color: var(--jv-text-primary);
 }
 
 .pop-badge-list {
@@ -155,8 +125,8 @@ onMounted(() => {
   flex-direction: column;
   align-items: center;
   gap: 4px;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
+  border: 1px solid var(--jv-border);
+  border-radius: var(--jv-radius-md);
   padding: 8px;
   min-width: 56px;
 }
@@ -169,7 +139,7 @@ onMounted(() => {
 
 .pop-month {
   font-size: 0.75rem;
-  color: #64748b;
+  color: var(--jv-text-muted);
 }
 
 .pop-badge.invalid {
@@ -178,5 +148,11 @@ onMounted(() => {
 
 .pop-badge.invalid .pop-badge-img {
   filter: grayscale(1);
+}
+
+.pop-truncated-hint {
+  margin-top: 8px;
+  font-size: 0.82rem;
+  color: var(--jv-text-muted);
 }
 </style>

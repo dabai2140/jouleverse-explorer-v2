@@ -1,81 +1,76 @@
 <template>
   <div class="block-list">
-    <div class="header">
+    <div class="page-header">
       <h1>Jouleverse 区块浏览器</h1>
-      <p class="subtitle">Chain ID: 3666 | RPC: https://rpc.jnsdao.com:8503</p>
+      <p class="subtitle">Chain ID: 3666 | RPC: rpc.jnsdao.com:8503</p>
     </div>
 
-    <div class="stats">
+    <div class="stats-grid">
       <div class="stat-card">
         <span class="stat-label">最新区块高度</span>
-        <span class="stat-value" v-if="latestBlockNumber !== null">
-          {{ latestBlockNumber }}
-        </span>
-        <span class="stat-value loading" v-else>加载中...</span>
+        <span class="stat-value" v-if="latestBlockNumber !== null">#{{ latestBlockNumber }}</span>
+        <span class="stat-value muted" v-else>加载中...</span>
       </div>
       <div class="stat-card">
         <span class="stat-label">网络状态</span>
-        <span class="stat-value" :class="{ success: isConnected, error: !isConnected }">
-          {{ isConnected ? '已连接' : '未连接' }}
+        <span class="stat-value" :class="isConnected ? 'success' : 'error'">
+          {{ isConnected ? '✓ 已连接' : '✗ 未连接' }}
         </span>
       </div>
     </div>
 
-    <div class="blocks-section">
-      <div class="section-header">
+    <div class="panel">
+      <div class="panel-header">
         <h2>最新区块</h2>
-        <button @click="refreshBlocks" class="refresh-btn" :disabled="loading">
-          {{ loading ? '刷新中...' : '刷新' }}
-        </button>
+        <JvActionButton :loading="loading" @click="refreshBlocks">刷新</JvActionButton>
       </div>
 
-      <div class="loading" v-if="loading">加载区块数据中...</div>
+      <JvLoading v-if="loading && blocks.length === 0" label="加载区块数据中..." />
 
-      <div class="blocks" v-else-if="blocks.length > 0">
-        <div v-for="(block, index) in blocks" :key="index" class="block-card">
-          <div class="block-header">
-            <div class="block-number">
-              <span class="label">区块 #</span>
-              <span class="value">{{ block.number }}</span>
+      <div v-else-if="blocks.length > 0" class="blocks-list">
+        <div
+          v-for="(block, index) in blocks"
+          :key="index"
+          class="block-card"
+        >
+          <div class="block-card-head">
+            <div class="num-row">
+              <span class="muted">区块 #</span>
+              <span class="block-num">{{ block.number }}</span>
             </div>
-            <div class="block-age">
-              <span class="value">{{ formatAge(block.timestamp) }}</span>
-            </div>
+            <span class="muted">{{ formatAge(block.timestamp) }}</span>
           </div>
-
-          <div class="block-details">
-            <div class="detail-row">
-              <span class="label">区块哈希</span>
-              <span class="value hash">{{ formatHash(block.hash) }}</span>
+          <div class="block-card-body">
+            <div class="meta-row">
+              <span class="muted">区块哈希</span>
+              <JvHashText :value="block.hash" type="block" :truncate="8" :linkable="false" />
             </div>
-            <div class="detail-row">
-              <span class="label">交易数</span>
-              <span class="value">{{ block.transactions.length }}</span>
+            <div class="meta-row">
+              <span class="muted">交易数</span>
+              <span>{{ block.transactions.length }}</span>
             </div>
-            <div class="detail-row">
-              <span class="label">Gas 使用</span>
-              <span class="value">{{ formatNumber(block.gasUsed) }}</span>
+            <div class="meta-row">
+              <span class="muted">Gas 使用</span>
+              <span>{{ formatNumber(block.gasUsed) }}</span>
             </div>
-            <div class="detail-row">
-              <span class="label">矿工</span>
-              <span class="value hash">{{ formatHash(block.miner) }}</span>
+            <div class="meta-row">
+              <span class="muted">矿工</span>
+              <JvHashText :value="block.miner" type="address" :truncate="8" :linkable="false" />
             </div>
           </div>
         </div>
       </div>
 
-      <div class="empty" v-else>
-        <p>暂无区块数据</p>
-        <button @click="refreshBlocks" class="btn-primary">加载区块</button>
-      </div>
+      <JvPageState v-else type="empty" title="暂无区块数据" />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { formatUnits } from 'viem'
+import { ref, onMounted, onUnmounted } from 'vue'
+import { formatAge, formatNumber } from '../utils/format'
 import { publicClient } from '../config/client'
+import { JvLoading, JvPageState, JvHashText, JvActionButton } from '../design-system'
 
 interface Block {
   number: bigint
@@ -90,56 +85,22 @@ const blocks = ref<Block[]>([])
 const latestBlockNumber = ref<bigint | null>(null)
 const loading = ref(false)
 const isConnected = ref(false)
-const lastBlockTime = ref<number>(Date.now())
+let autoRefreshTimer: ReturnType<typeof setInterval> | null = null
 
-const formatAge = (timestamp: bigint): string => {
-  const blockTime = Number(timestamp) * 1000
-  const now = Date.now()
-  const diff = Math.floor((now - blockTime) / 1000)
-  
-  if (diff < 60) return `${diff} 秒前`
-  if (diff < 3600) return `${Math.floor(diff / 60)} 分钟前`
-  if (diff < 86400) return `${Math.floor(diff / 3600)} 小时前`
-  return `${Math.floor(diff / 86400)} 天前`
-}
-
-const formatHash = (hash: string): string => {
-  if (!hash) return ''
-  return `${hash.substring(0, 10)}...${hash.substring(hash.length - 8)}`
-}
-
-const formatNumber = (num: bigint): string => {
-  return formatUnits(num, 0)
-}
 
 const refreshBlocks = async () => {
   loading.value = true
   try {
-    // Get latest block number
     const blockNumber = await publicClient.getBlockNumber()
     latestBlockNumber.value = blockNumber
     isConnected.value = true
-
-    // Get last 10 blocks
-    const newBlocks: Block[] = []
+    const fetched: Block[] = []
     for (let i = 0; i < 10; i++) {
-      const block = await publicClient.getBlock({
-        blockNumber: blockNumber - BigInt(i),
-      })
-      newBlocks.push({
-        number: block.number,
-        hash: block.hash || '',
-        timestamp: block.timestamp,
-        transactions: block.transactions,
-        gasUsed: block.gasUsed,
-        miner: block.miner,
-      })
+      const b = await publicClient.getBlock({ blockNumber: blockNumber - BigInt(i) })
+      fetched.push({ number: b.number, hash: b.hash || '', timestamp: b.timestamp, transactions: b.transactions, gasUsed: b.gasUsed, miner: b.miner })
     }
-
-    blocks.value = newBlocks
-    lastBlockTime.value = Date.now()
-  } catch (error) {
-    console.error('Failed to fetch blocks:', error)
+    blocks.value = fetched
+  } catch {
     isConnected.value = false
   } finally {
     loading.value = false
@@ -148,9 +109,11 @@ const refreshBlocks = async () => {
 
 onMounted(() => {
   refreshBlocks()
-  
-  // Auto refresh every 15 seconds
-  setInterval(refreshBlocks, 15000)
+  autoRefreshTimer = setInterval(refreshBlocks, 15000)
+})
+
+onUnmounted(() => {
+  if (autoRefreshTimer) clearInterval(autoRefreshTimer)
 })
 </script>
 
@@ -161,184 +124,111 @@ onMounted(() => {
   padding: 20px;
 }
 
-.header {
+.page-header {
   text-align: center;
-  margin-bottom: 40px;
+  margin-bottom: 32px;
 }
 
-.header h1 {
-  font-size: 2.5rem;
-  color: #1e293b;
-  margin: 0 0 10px 0;
+.page-header h1 {
+  font-size: 2rem;
+  color: var(--jv-text-primary);
+  margin: 0 0 8px 0;
 }
 
 .subtitle {
-  color: #64748b;
-  font-size: 0.9rem;
+  color: var(--jv-text-muted);
+  font-size: 0.875rem;
+  margin: 0;
+  font-family: var(--jv-font-mono);
 }
 
-.stats {
+.stats-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 20px;
-  margin-bottom: 40px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  margin-bottom: 28px;
 }
 
 .stat-card {
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  padding: 20px;
+  background: var(--jv-bg-surface);
+  border: 1px solid var(--jv-border);
+  border-radius: var(--jv-radius-md);
+  padding: 18px 20px;
   text-align: center;
 }
 
 .stat-label {
   display: block;
-  color: #64748b;
-  font-size: 0.9rem;
+  color: var(--jv-text-muted);
+  font-size: 0.85rem;
   margin-bottom: 8px;
 }
 
 .stat-value {
   display: block;
-  font-size: 1.与其他rem;
-  font-weight: 600;
-  color: #1e293b;
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--jv-text-primary);
 }
 
-.stat-value.loading {
-  color: #64748b;
+.stat-value.muted { color: var(--jv-text-muted); font-size: 1rem; }
+.stat-value.success { color: var(--jv-success); }
+.stat-value.error { color: var(--jv-error); }
+
+.panel {
+  background: var(--jv-bg-surface);
+  border: 1px solid var(--jv-border);
+  border-radius: var(--jv-radius-lg);
+  padding: 20px;
 }
 
-.stat-value.success {
-  color: #10b981;
-}
-
-.stat-value.error {
-  color: #ef4444;
-}
-
-.blocks-section {
-  background: white;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  overflow: hidden;
-}
-
-.section-header {
+.panel-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 20px;
-  border-bottom: 1px solid #e2e8f0;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--jv-border);
+  margin-bottom: 16px;
 }
 
-.section-header h2 {
+.panel-header h2 {
   margin: 0;
-  font-size: 1.5rem;
-  color: #1e293b;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--jv-text-primary);
 }
 
-.refresh-btn {
-  background: #3b82f6;
-  color: white;
-  border: none;
-  padding: 8px 16px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 0.9rem;
-}
-
-.refresh-btn:hover:not(:disabled) {
-  background: #2563eb;
-}
-
-.refresh-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.loading, .empty {
-  padding: 60px 20px;
-  text-align: center;
-  color: #64748b;
-}
-
-.blocks {
-  display: flex;
-  flex-direction: column;
-}
+.blocks-list { display: flex; flex-direction: column; }
 
 .block-card {
-  padding: 20px;
-  border-bottom: 1px solid #e2e8f0;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--jv-border);
 }
 
-.block-card:last-child {
-  border-bottom: none;
-}
+.block-card:last-child { border-bottom: none; }
 
-.block-header {
+.block-card-head {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 
-.block-number .label {
-  color: #64748b;
-  font-size: 0.9rem;
-}
+.num-row { display: flex; align-items: center; gap: 4px; }
+.block-num { font-size: 1.1rem; font-weight: 700; color: var(--jv-text-primary); }
+.muted { color: var(--jv-text-muted); font-size: 0.85rem; }
 
-.block-number .value {
-  color: #1e293b;
-  font-size: 1.2rem;
-  font-weight: 600;
-  margin-left: 4px;
-}
-
-.block-age .value {
-  color: #64748b;
-  font-size: 0.9rem;
-}
-
-.block-details {
+.block-card-body {
   display: grid;
-  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 6px;
 }
 
-.detail-row {
+.meta-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-}
-
-.detail-row .label {
-  color: #64748b;
-  font-size: 0.9rem;
-}
-
-.detail-row .value {
-  color: #1e293b;
-  font-size: 0.9rem;
-}
-
-.detail-row .value.hash {
-  font-family: 'Courier New', monospace;
-  color: #3b82f6;
-}
-
-.btn-primary {
-  background: #3b82f6;
-  color: white;
-  border: none;
-  padding: 10px 20px;
-  border-radius: 6px;
-  cursor: pointer;
-  margin-top: 20px;
-}
-
-.btn-primary:hover {
-  background: #2563eb;
+  font-size: 0.85rem;
+  color: var(--jv-text-secondary);
 }
 </style>

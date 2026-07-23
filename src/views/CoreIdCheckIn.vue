@@ -1,23 +1,22 @@
 <template>
   <div class="core-id-checkin">
-    <div v-if="!walletStore.isConnected" class="checkin-block wallet-prompt">
-      <h3>🔐 签到操作</h3>
-      <p>签到操作需要连接钱包。</p>
-    </div>
+    <JvPageState
+      v-if="!walletStore.isConnected"
+      type="wallet-disconnected"
+      description="签到操作需要连接钱包，请先在右上角连接 MetaMask。"
+    />
 
     <div v-else-if="walletStore.address?.toLowerCase() !== address.toLowerCase()" class="checkin-block wallet-warning">
       <h3>⚠️ 地址不匹配</h3>
       <p>当前连接的钱包地址不是此页面地址，无法代为签到。</p>
-      <p>连接地址：{{ walletStore.formatAddress(walletStore.address) }}</p>
-      <p>页面地址：{{ formatAddress(address) }}</p>
+      <p>连接地址：<span class="addr-mono">{{ walletStore.formatAddress(walletStore.address) }}</span></p>
+      <p>页面地址：<span class="addr-mono">{{ formatAddress(address) }}</span></p>
     </div>
 
     <div v-else class="checkin-block checkin-panel">
       <div class="wallet-info-badge">
-        <span class="badge">✓ 钱包已连接</span>
-        <span class="status" :class="{ live: isLive, expired: !isLive }">
-          {{ isLive ? '活跃' : '已过期' }}
-        </span>
+        <span class="badge-connected">✓ 钱包已连接</span>
+        <JvStatusTag :status="isLive ? 'active' : 'expired'" />
       </div>
 
       <div class="checkin-stats">
@@ -39,9 +38,15 @@
         </div>
       </div>
 
-      <button @click="handleCheckIn" :disabled="loadingCheckIn || !canCheckIn" class="btn-primary">
+      <JvActionButton
+        :loading="loadingCheckIn"
+        :disabled="!canCheckIn"
+        size="large"
+        style="width: 100%"
+        @click="handleCheckIn"
+      >
         {{ checkInButtonText }}
-      </button>
+      </JvActionButton>
       <p v-if="checkInStatus" class="status-message">{{ checkInStatus }}</p>
       <p v-if="checkInError" class="error-message">{{ checkInError }}</p>
     </div>
@@ -56,6 +61,7 @@ import { publicClient } from '../config/client'
 import { JVCORE_ADDRESS, jvcoreABI } from '../contracts/jvcore'
 import { writeContract, switchChain, waitForTransactionReceipt } from 'wagmi/actions'
 import { config as wagmiConfig } from '../stores/wallet'
+import { JvPageState, JvStatusTag, JvActionButton } from '../design-system'
 import type { NFTMetadata } from '../types/coreid'
 
 interface Props {
@@ -72,36 +78,20 @@ const walletStore = useWalletStore()
 const minCheckInInterval = ref(0n)
 const expireDuration = ref(0n)
 const now = ref(Math.floor(Date.now() / 1000))
-
 const loadingCheckIn = ref(false)
 const checkInError = ref<string | null>(null)
 const checkInStatus = ref<string | null>(null)
 
-// 最安全的错误处理函数（同 WJOperations.vue）
 const safeErrorMessage = (error: unknown): string => {
   try {
-    if (error === null || error === undefined) {
-      return 'Unknown error'
-    }
-    if (typeof error === 'string') {
-      return error
-    }
+    if (error === null || error === undefined) return 'Unknown error'
+    if (typeof error === 'string') return error
     if (typeof error === 'object') {
-      if ('message' in error && typeof (error as any).message === 'string') {
-        return (error as any).message
-      }
-      if ('toString' in error && typeof (error as any).toString === 'function') {
-        try {
-          return (error as any).toString()
-        } catch {
-          return 'Could not convert error to string'
-        }
-      }
+      if ('message' in error && typeof (error as any).message === 'string') return (error as any).message
+      if ('toString' in error) { try { return (error as any).toString() } catch { return 'Could not convert error to string' } }
     }
     return String(error)
-  } catch {
-    return 'Could not parse error'
-  }
+  } catch { return 'Could not parse error' }
 }
 
 const lastCheckInTime = computed(() => props.metadata?.lastCheckInTime ?? 0)
@@ -121,7 +111,6 @@ const checkInButtonText = computed(() => {
   return `还需等待 ${formatDuration(remaining)}`
 })
 
-// 秒数 -> "X天X小时"/"X小时X分钟"/"X分钟"
 const formatDuration = (seconds: number | bigint): string => {
   const s = Number(seconds)
   if (s <= 0) return '0分钟'
@@ -136,16 +125,8 @@ const formatDuration = (seconds: number | bigint): string => {
 const loadCheckInParams = async () => {
   try {
     const [interval, expire] = await Promise.all([
-      publicClient.readContract({
-        address: JVCORE_ADDRESS,
-        abi: jvcoreABI,
-        functionName: 'minCheckInInterval',
-      }),
-      publicClient.readContract({
-        address: JVCORE_ADDRESS,
-        abi: jvcoreABI,
-        functionName: 'expireDuration',
-      }),
+      publicClient.readContract({ address: JVCORE_ADDRESS, abi: jvcoreABI, functionName: 'minCheckInInterval' }),
+      publicClient.readContract({ address: JVCORE_ADDRESS, abi: jvcoreABI, functionName: 'expireDuration' }),
     ])
     minCheckInInterval.value = interval
     expireDuration.value = expire
@@ -155,66 +136,40 @@ const loadCheckInParams = async () => {
 }
 
 const handleCheckIn = async () => {
-  if (!walletStore.address) {
-    checkInError.value = '钱包未连接'
-    return
-  }
-
+  if (!walletStore.address) { checkInError.value = '钱包未连接'; return }
   loadingCheckIn.value = true
   checkInError.value = null
   checkInStatus.value = null
-
   try {
-    // 检查并切换到 Jouleverse 链
-    console.log('[CoreIdCheckIn] Switching to Jouleverse...')
-    try {
-      await switchChain(wagmiConfig, { chainId: jouleverseChain.id })
-      console.log('[CoreIdCheckIn] Switched to Jouleverse')
-    } catch (err) {
-      console.log('[CoreIdCheckIn] Switch chain error (might already be on correct chain):', err)
+    try { await switchChain(wagmiConfig, { chainId: jouleverseChain.id }) } catch {
+      checkInError.value = '请先在钱包中手动切换到 Jouleverse 网络（Chain ID: 3666，RPC: https://rpc.jnsdao.com:8503）'
+      loadingCheckIn.value = false
+      return
     }
-
-    console.log('[CoreIdCheckIn] Calling writeContract checkIn...')
     const hash = await writeContract(wagmiConfig, {
-      address: JVCORE_ADDRESS,
-      abi: jvcoreABI,
-      functionName: 'checkIn',
-      args: [props.coreId],
+      address: JVCORE_ADDRESS, abi: jvcoreABI, functionName: 'checkIn', args: [props.coreId],
     })
-
-    console.log('[CoreIdCheckIn] Transaction hash:', hash)
     checkInStatus.value = `交易已提交，等待链上确认... (${hash.slice(0, 10)}...)`
-
-    // 必须等交易真正上链确认后才能重新读取tokenURI，否则liveness/lastCheckInTime还是旧值
     await waitForTransactionReceipt(wagmiConfig, { hash })
-    console.log('[CoreIdCheckIn] Transaction confirmed')
-
     checkInStatus.value = '签到成功！状态已更新。'
     now.value = Math.floor(Date.now() / 1000)
     emit('checkedIn')
   } catch (error) {
-    console.error('[CoreIdCheckIn] Check-in failed:', error)
-    const errMessage = safeErrorMessage(error)
-    console.error('[CoreIdCheckIn] Error message:', errMessage)
-    checkInError.value = '签到失败: ' + errMessage
+    checkInError.value = '签到失败: ' + safeErrorMessage(error)
   } finally {
     loadingCheckIn.value = false
   }
 }
 
-onMounted(() => {
-  loadCheckInParams()
-})
+onMounted(() => { loadCheckInParams() })
 </script>
 
 <style scoped>
-.core-id-checkin {
-  margin-top: 16px;
-}
+.core-id-checkin { margin-top: 16px; }
 
 .checkin-block {
   border: 1px solid var(--jv-border);
-  border-radius: 12px;
+  border-radius: var(--jv-radius-lg);
   padding: 20px;
 }
 
@@ -224,37 +179,20 @@ onMounted(() => {
   color: var(--jv-text-primary);
 }
 
-.wallet-prompt {
-  background: var(--jv-info-bg);
-  border-color: var(--jv-info) !important;
-}
-
-.wallet-prompt h3 {
-  color: var(--jv-info);
-}
-
-.wallet-prompt p {
-  margin: 0;
-  color: var(--jv-info);
-}
-
 .wallet-warning {
   background: var(--jv-warning-bg);
   border-color: var(--jv-warning) !important;
 }
 
-.wallet-warning h3 {
-  color: var(--jv-warning);
+.wallet-warning h3 { color: var(--jv-warning); }
+.wallet-warning p { margin: 8px 0; color: var(--jv-warning); }
+
+.addr-mono {
+  font-family: var(--jv-font-mono);
+  font-size: 0.9rem;
 }
 
-.wallet-warning p {
-  margin: 8px 0;
-  color: var(--jv-warning);
-}
-
-.checkin-panel {
-  background: var(--jv-bg-page);
-}
+.checkin-panel { background: var(--jv-bg-page); }
 
 .wallet-info-badge {
   display: flex;
@@ -262,31 +200,14 @@ onMounted(() => {
   gap: 12px;
   background: var(--jv-success-bg);
   border: 1px solid var(--jv-success);
-  border-radius: 8px;
+  border-radius: var(--jv-radius-md);
   padding: 8px 16px;
   margin-bottom: 16px;
 }
 
-.wallet-info-badge .badge {
+.badge-connected {
   color: var(--jv-success);
   font-weight: 600;
-}
-
-.wallet-info-badge .status {
-  font-weight: 600;
-  padding: 2px 10px;
-  border-radius: 999px;
-  font-size: 0.85rem;
-}
-
-.wallet-info-badge .status.live {
-  background: var(--jv-success-bg);
-  color: var(--jv-success);
-}
-
-.wallet-info-badge .status.expired {
-  background: var(--jv-error-bg);
-  color: var(--jv-error);
 }
 
 .checkin-stats {
@@ -300,46 +221,21 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   padding: 6px 0;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid var(--jv-border);
   font-size: 0.9rem;
 }
 
-.stat-label {
-  color: #64748b;
-}
-
-.stat-value {
-  color: #1e293b;
-  font-weight: 500;
-}
-
-.btn-primary {
-  background: #3b82f6;
-  color: white;
-  border: none;
-  padding: 10px 20px;
-  border-radius: 6px;
-  cursor: pointer;
-  width: 100%;
-}
-
-.btn-primary:hover:not(:disabled) {
-  background: #2563eb;
-}
-
-.btn-primary:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
+.stat-label { color: var(--jv-text-muted); }
+.stat-value { color: var(--jv-text-primary); font-weight: 500; }
 
 .status-message {
-  color: #15803d;
+  color: var(--jv-success);
   font-size: 0.85rem;
   margin: 8px 0 0 0;
 }
 
 .error-message {
-  color: #ef4444;
+  color: var(--jv-error);
   font-size: 0.85rem;
   margin: 8px 0 0 0;
 }
