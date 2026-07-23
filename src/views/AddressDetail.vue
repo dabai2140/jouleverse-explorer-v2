@@ -106,7 +106,7 @@
       <div class="panel">
         <h2>📜 代币转账记录</h2>
         <div class="tx-toolbar">
-          <span v-if="txLogsLoaded && !txLoadError" class="tx-count">共 {{ totalTxs }} 条，第 {{ currentPage }} / {{ totalPages }} 页</span>
+          <span v-if="txLogsLoaded && !txLoadError" class="tx-count">显示第 {{ currentPage }} 页（每页10个区块，共 {{ totalTxs }} 笔交易）</span>
           <span v-else-if="txLoadError" class="tx-count error">加载失败</span>
           <span v-else class="tx-count muted">查询中...</span>
           <div class="pagination" v-if="totalPages > 1">
@@ -115,7 +115,7 @@
             <button @click="nextPage" :disabled="currentPage === totalPages || loadingTxs" class="page-btn">→</button>
           </div>
         </div>
-        <p class="tx-scope-note">仅显示 ERC-20/ERC-721 代币转账（WJ、JNS、NFT 等），最近 200 万区块内记录；原生 J 转账暂不支持</p>
+        <p class="tx-scope-note">扫描最近 10 个区块中与当前地址相关的交易</p>
 
         <JvLoading v-if="loadingTxs" label="加载中..." />
 
@@ -155,7 +155,7 @@
           v-else-if="txLogsLoaded"
           :type="txLoadError ? 'network-error' : 'empty'"
           :title="txLoadError ? '转账记录加载失败' : '暂无代币转账记录'"
-          :description="txLoadError ? '请刷新页面重试' : '该地址在最近 200 万区块内无代币转账'"
+          :description="txLoadError ? '请刷新页面重试' : '该地址在最近的区块中无交易记录'"
         />
       </div>
     </div>
@@ -172,7 +172,6 @@ import WJOperations from './WJOperations.vue'
 import CoreIdSection from './CoreIdSection.vue'
 import { publicClient } from '../config/client'
 import { encodeJVA, detectAddressFormat, normalizeToHex } from '../utils/jvaddress'
-import { formatAge } from '../utils/format'
 import { JvLoading, JvPageState, JvHashText, JvAmount } from '../design-system'
 
 const router = useRouter()
@@ -211,14 +210,12 @@ const wjBalance = ref<bigint | null>(null)
 const loadingBalance = ref(true)
 const loadingWJ = ref(true)
 
-const TX_PAGE_SIZE = 20
-const TRANSFER_SIG = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef' as `0x${string}`
 const transactions = ref<any[]>([])
 const loadingTxs = ref(false)
 const currentPage = ref(1)
 const totalTxs = ref(0)
 const totalPages = ref(1)
-const allTxLogs = ref<{ transactionHash: `0x${string}`; blockNumber: bigint }[]>([])
+const maxBlock = ref<bigint>(0n)
 const txLogsLoaded = ref(false)
 const txLoadError = ref(false)
 
@@ -324,58 +321,59 @@ const loadMoreJns = async () => {
 const loadTransactions = async (page: number = 1) => {
   loadingTxs.value = true
   transactions.value = []
+  currentPage.value = page
   try {
-    if (!txLogsLoaded.value) {
-      const addr = hexAddress.value.toLowerCase()
-      const paddedAddr = ('0x' + '0'.repeat(24) + addr.slice(2)) as `0x${string}`
-      // 分块查询，每块 100k 区块，避免 RPC block range 限制
-      const CHUNK_SIZE = 100_000n
-      const MAX_CHUNKS = 20 // 共扫描最近 2M 区块
-      const latestBlock = await publicClient.getBlockNumber()
-      const allRawLogs: any[] = []
-      for (let i = 0; i < MAX_CHUNKS; i++) {
-        const toBlock = latestBlock - BigInt(i) * CHUNK_SIZE
-        const fromBlock = toBlock > CHUNK_SIZE ? toBlock - CHUNK_SIZE : 0n
-        if (toBlock === 0n) break
-        try {
-          const [outChunk, inChunk] = await Promise.all([
-            publicClient.getLogs({ topics: [TRANSFER_SIG, paddedAddr, null], fromBlock, toBlock } as any),
-            publicClient.getLogs({ topics: [TRANSFER_SIG, null, paddedAddr], fromBlock, toBlock } as any),
-          ])
-          allRawLogs.push(...outChunk, ...inChunk)
-        } catch {
-          // 单块失败时跳过，继续向前扫描
+    const latestBlock = await publicClient.getBlockNumber()
+    maxBlock.value = latestBlock
+
+    const blocksPerPage = 10
+    const startBlock = latestBlock - BigInt((page - 1) * blocksPerPage)
+    const endBlock = latestBlock - BigInt(page * blocksPerPage)
+
+    let txCount = 0
+
+    for (let blockNumber = startBlock; blockNumber > endBlock && blockNumber >= 0n; blockNumber--) {
+      const block = await publicClient.getBlock({ blockNumber })
+
+      if (block && block.transactions.length > 0) {
+        for (const tx of block.transactions) {
+          try {
+            const txData = await publicClient.getTransaction({ hash: tx as `0x${string}` })
+            if (txData &&
+                (txData.from.toLowerCase() === hexAddress.value.toLowerCase() ||
+                 (txData.to && txData.to.toLowerCase() === hexAddress.value.toLowerCase()))) {
+              // 区块年龄
+              let age = ''
+              try {
+                if (block && block.timestamp) {
+                  const blockTime = Number(block.timestamp) * 1000
+                  const now = Date.now()
+                  const diff = Math.floor((now - blockTime) / 1000)
+                  if (diff < 60) age = `${diff} 秒前`
+                  else if (diff < 3600) age = `${Math.floor(diff / 60)} 分钟前`
+                  else if (diff < 86400) age = `${Math.floor(diff / 3600)} 小时前`
+                  else age = `${Math.floor(diff / 86400)} 天前`
+                }
+              } catch { }
+
+              transactions.value.push({
+                hash: txData.hash,
+                from: txData.from,
+                to: txData.to,
+                blockNumber: txData.blockNumber,
+                age: age,
+              })
+              txCount++
+            }
+          } catch { }
         }
-        if (fromBlock === 0n) break
       }
-      const seen = new Set<string>()
-      const combined = allRawLogs.filter(log => {
-        if (seen.has(log.transactionHash)) return false
-        seen.add(log.transactionHash)
-        return true
-      })
-      combined.sort((a, b) => Number(b.blockNumber) - Number(a.blockNumber))
-      allTxLogs.value = combined as { transactionHash: `0x${string}`; blockNumber: bigint }[]
-      totalTxs.value = combined.length
-      totalPages.value = Math.max(1, Math.ceil(combined.length / TX_PAGE_SIZE))
-      txLogsLoaded.value = true
     }
-    const start = (page - 1) * TX_PAGE_SIZE
-    const pageLogs = allTxLogs.value.slice(start, start + TX_PAGE_SIZE)
-    if (pageLogs.length === 0) return
-    const uniqueBlockNums = [...new Set(pageLogs.map(l => l.blockNumber))]
-    const [txDetails, blockList] = await Promise.all([
-      Promise.all(pageLogs.map(log => publicClient.getTransaction({ hash: log.transactionHash }).catch(() => null))),
-      Promise.all(uniqueBlockNums.map(bn => publicClient.getBlock({ blockNumber: bn }).catch(() => null))),
-    ])
-    const blockTimestamps = new Map<bigint, bigint>()
-    blockList.forEach(b => { if (b) blockTimestamps.set(b.number!, b.timestamp) })
-    transactions.value = txDetails
-      .map((tx, i) => tx ? {
-        hash: tx.hash, from: tx.from, to: tx.to, blockNumber: tx.blockNumber,
-        age: formatAge(Number(blockTimestamps.get(pageLogs[i].blockNumber) ?? 0n)),
-      } : null)
-      .filter((tx): tx is NonNullable<typeof tx> => tx !== null)
+
+    totalTxs.value = txCount
+    totalPages.value = Math.ceil(Number(latestBlock) / blocksPerPage)
+    txLogsLoaded.value = true
+    txLoadError.value = false
   } catch {
     transactions.value = []
     txLoadError.value = true
@@ -385,8 +383,8 @@ const loadTransactions = async (page: number = 1) => {
   } finally { loadingTxs.value = false }
 }
 
-const prevPage = () => { if (currentPage.value > 1) { currentPage.value--; loadTransactions(currentPage.value) } }
-const nextPage = () => { if (currentPage.value < totalPages.value) { currentPage.value++; loadTransactions(currentPage.value) } }
+const prevPage = () => { if (currentPage.value > 1) { loadTransactions(currentPage.value - 1) } }
+const nextPage = () => { if (currentPage.value < totalPages.value) { loadTransactions(currentPage.value + 1) } }
 
 onMounted(() => {
   if (error.value) return
