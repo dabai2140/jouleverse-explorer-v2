@@ -106,16 +106,16 @@
       <div class="panel">
         <h2>📜 代币转账记录</h2>
         <div class="tx-toolbar">
-          <span v-if="txLogsLoaded && !txLoadError" class="tx-count">显示第 {{ currentPage }} 页（每页10个区块，共 {{ totalTxs }} 笔交易）</span>
+          <span v-if="txLogsLoaded && !txLoadError" class="tx-count">{{ totalTxs }} 笔记录（仅代币转账，不含原生 J）</span>
           <span v-else-if="txLoadError" class="tx-count error">加载失败</span>
           <span v-else class="tx-count muted">查询中...</span>
-          <div class="pagination" v-if="totalPages > 1">
-            <button @click="prevPage" :disabled="currentPage === 1 || loadingTxs" class="page-btn">←</button>
-            <span class="page-info">{{ currentPage }} / {{ totalPages }}</span>
-            <button @click="nextPage" :disabled="currentPage === totalPages || loadingTxs" class="page-btn">→</button>
+          <div class="pagination">
+            <button @click="prevYear" :disabled="!hasPrevYear || loadingTxs" class="page-btn">←</button>
+            <span class="page-info"><strong>{{ currentYear }}</strong></span>
+            <button @click="nextYear" :disabled="!hasNextYear || loadingTxs" class="page-btn">→</button>
           </div>
         </div>
-        <p class="tx-scope-note">扫描最近 10 个区块中与当前地址相关的交易</p>
+        <p class="tx-scope-note">查询 {{ currentYear }} 年内的 ERC-20/ERC-721 代币转账记录</p>
 
         <JvLoading v-if="loadingTxs" label="加载中..." />
 
@@ -173,6 +173,7 @@ import CoreIdSection from './CoreIdSection.vue'
 import { publicClient } from '../config/client'
 import { encodeJVA, detectAddressFormat, normalizeToHex } from '../utils/jvaddress'
 import { JvLoading, JvPageState, JvHashText, JvAmount } from '../design-system'
+import { initTimeCache, getYearBlockRange, getAvailableYears } from '../utils/timestamp-to-block'
 
 const router = useRouter()
 
@@ -210,14 +211,18 @@ const wjBalance = ref<bigint | null>(null)
 const loadingBalance = ref(true)
 const loadingWJ = ref(true)
 
+const TRANSFER_SIG = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef' as `0x${string}`
+
 const transactions = ref<any[]>([])
 const loadingTxs = ref(false)
-const currentPage = ref(1)
+const currentYear = ref(new Date().getFullYear())
 const totalTxs = ref(0)
-const totalPages = ref(1)
-const maxBlock = ref<bigint>(0n)
+const availableYears = ref<number[]>([])
 const txLogsLoaded = ref(false)
 const txLoadError = ref(false)
+
+const hasPrevYear = computed(() => availableYears.value.length > 0 && currentYear.value > availableYears.value[0])
+const hasNextYear = computed(() => availableYears.value.length > 0 && currentYear.value < availableYears.value[availableYears.value.length - 1])
 
 const formatLabel = computed(() => ({ hex: 'HEX', b32: 'B32', full: 'JVA' }[inputFormat.value]))
 
@@ -318,77 +323,133 @@ const loadMoreJns = async () => {
   finally { loadingJnsHoldings.value = false }
 }
 
-const loadTransactions = async (page: number = 1) => {
+/** 获取某年中与目标地址相关的代币转账日志 */
+const loadTransactions = async (year: number) => {
   loadingTxs.value = true
   transactions.value = []
-  currentPage.value = page
+  txLogsLoaded.value = false
+  txLoadError.value = false
+
   try {
+    // 初始化时间缓存（用最新区块校准平均出块时间）
     const latestBlock = await publicClient.getBlockNumber()
-    maxBlock.value = latestBlock
+    const latestData = await publicClient.getBlock({ blockNumber: latestBlock })
+    initTimeCache(latestBlock, Number(latestData.timestamp))
+    availableYears.value = getAvailableYears(latestBlock)
 
-    const blocksPerPage = 10
-    const startBlock = latestBlock - BigInt((page - 1) * blocksPerPage)
-    const endBlock = latestBlock - BigInt(page * blocksPerPage)
+    const { fromBlock, toBlock } = getYearBlockRange(year)
+    const addr = hexAddress.value.toLowerCase()
+    const paddedAddr = ('0x' + '0'.repeat(24) + addr.slice(2)) as `0x${string}`
 
-    let txCount = 0
+    // 并行查询：地址作为 sender + 作为 receiver 的 Transfer 事件
+    const [outLogs, inLogs] = await Promise.all([
+      (publicClient as any).getLogs({
+        topics: [TRANSFER_SIG, paddedAddr, null],
+        fromBlock,
+        toBlock,
+      }),
+      (publicClient as any).getLogs({
+        topics: [TRANSFER_SIG, null, paddedAddr],
+        fromBlock,
+        toBlock,
+      }),
+    ])
 
-    for (let blockNumber = startBlock; blockNumber > endBlock && blockNumber >= 0n; blockNumber--) {
-      const block = await publicClient.getBlock({ blockNumber })
+    // 去重（同一笔 tx 可能同时触发转入+转出）
+    const seen = new Set<string>()
+    const allLogs = [...outLogs, ...inLogs].filter(log => {
+      if (seen.has(log.transactionHash)) return false
+      seen.add(log.transactionHash)
+      return true
+    })
+    // 按区块号降序排列
+    allLogs.sort((a, b) => Number(b.blockNumber) - Number(a.blockNumber))
 
-      if (block && block.transactions.length > 0) {
-        for (const tx of block.transactions) {
-          try {
-            const txData = await publicClient.getTransaction({ hash: tx as `0x${string}` })
-            if (txData &&
-                (txData.from.toLowerCase() === hexAddress.value.toLowerCase() ||
-                 (txData.to && txData.to.toLowerCase() === hexAddress.value.toLowerCase()))) {
-              // 区块年龄
-              let age = ''
-              try {
-                if (block && block.timestamp) {
-                  const blockTime = Number(block.timestamp) * 1000
-                  const now = Date.now()
-                  const diff = Math.floor((now - blockTime) / 1000)
-                  if (diff < 60) age = `${diff} 秒前`
-                  else if (diff < 3600) age = `${Math.floor(diff / 60)} 分钟前`
-                  else if (diff < 86400) age = `${Math.floor(diff / 3600)} 小时前`
-                  else age = `${Math.floor(diff / 86400)} 天前`
-                }
-              } catch { }
+    totalTxs.value = allLogs.length
 
-              transactions.value.push({
-                hash: txData.hash,
-                from: txData.from,
-                to: txData.to,
-                blockNumber: txData.blockNumber,
-                age: age,
-              })
-              txCount++
-            }
-          } catch { }
-        }
-      }
+    if (allLogs.length === 0) {
+      txLogsLoaded.value = true
+      return
     }
 
-    totalTxs.value = txCount
-    totalPages.value = Math.ceil(Number(latestBlock) / blocksPerPage)
+    // 获取交易详情 + 区块时间戳
+    const uniqueBlocks = [...new Set(allLogs.map(l => l.blockNumber))]
+    const [txDetails, blocks] = await Promise.all([
+      Promise.all(allLogs.map(log =>
+        publicClient.getTransaction({ hash: log.transactionHash }).catch(() => null)
+      )),
+      Promise.all(uniqueBlocks.map(bn =>
+        publicClient.getBlock({ blockNumber: bn }).catch(() => null)
+      )),
+    ])
+
+    const blockTimestamps = new Map<string, bigint>()
+    blocks.forEach(b => { if (b) blockTimestamps.set(b.hash!, b.timestamp) })
+    const blockNumbers = new Map<string, bigint>()
+    blocks.forEach(b => { if (b) blockNumbers.set(b.hash!, b.number!) })
+
+    transactions.value = txDetails
+      .map((tx, _i) => {
+        if (!tx) return null
+        const ts = blockTimestamps.get(tx.blockHash)
+        const age = ts ? formatBlockAge(Number(ts) * 1000) : ''
+        return {
+          hash: tx.hash,
+          from: tx.from,
+          to: tx.to,
+          blockNumber: tx.blockNumber,
+          blockHash: tx.blockHash,
+          age,
+        }
+      })
+      .filter((tx): tx is NonNullable<typeof tx> => tx !== null)
+
     txLogsLoaded.value = true
     txLoadError.value = false
-  } catch {
+  } catch (e) {
+    console.error('loadTransactions error:', e)
     transactions.value = []
     txLoadError.value = true
-    txLogsLoaded.value = true
     totalTxs.value = 0
-    totalPages.value = 1
-  } finally { loadingTxs.value = false }
+  } finally {
+    loadingTxs.value = false
+  }
 }
 
-const prevPage = () => { if (currentPage.value > 1) { loadTransactions(currentPage.value - 1) } }
-const nextPage = () => { if (currentPage.value < totalPages.value) { loadTransactions(currentPage.value + 1) } }
+/** 格式化区块年龄 */
+function formatBlockAge(blockTime: number): string {
+  const now = Date.now()
+  const diff = Math.floor((now - blockTime) / 1000)
+  if (diff < 60) return `${diff} 秒前`
+  if (diff < 3600) return `${Math.floor(diff / 60)} 分钟前`
+  if (diff < 86400) return `${Math.floor(diff / 3600)} 小时前`
+  return `${Math.floor(diff / 86400)} 天前`
+}
+
+const prevYear = () => {
+  if (hasPrevYear.value) {
+    const idx = availableYears.value.indexOf(currentYear.value)
+    if (idx > 0) {
+      currentYear.value = availableYears.value[idx - 1]
+      loadTransactions(currentYear.value)
+    }
+  }
+}
+
+const nextYear = () => {
+  if (hasNextYear.value) {
+    const idx = availableYears.value.indexOf(currentYear.value)
+    if (idx < availableYears.value.length - 1) {
+      currentYear.value = availableYears.value[idx + 1]
+      loadTransactions(currentYear.value)
+    }
+  }
+}
 
 onMounted(() => {
   if (error.value) return
-  loadBalance(); loadWJBalance(); loadJnsName(); loadJnsHoldings(); loadTransactions(1)
+  loadBalance(); loadWJBalance(); loadJnsName(); loadJnsHoldings()
+  loadTransactions(currentYear.value)
 })
 </script>
 
