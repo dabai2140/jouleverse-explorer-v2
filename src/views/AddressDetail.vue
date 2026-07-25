@@ -341,19 +341,32 @@ const loadTransactions = async (year: number) => {
     const addr = hexAddress.value.toLowerCase()
     const paddedAddr = ('0x' + '0'.repeat(24) + addr.slice(2)) as `0x${string}`
 
+    // 已知代币合约地址列表（必须指定 address 字段，否则 RPC 全量扫描超时）
+    const TOKEN_CONTRACTS = [
+      '0x7fba9BB966189Db8C4fE33B7bf67Bfa24203c6AD', // WJ
+      '0xf8AbF36Bb2dc525b1E566d6B42F6Fd1BB2035b89', // JNS
+      '0x8d214415b9c5F5E4Cf4CbCfb4a5DEd47fb516392', // Core ID
+      '0xCb1429da13cE40e75519148e796C6D58dD6b1a8E', // PopBadge
+    ]
+
     // 并行查询：地址作为 sender + 作为 receiver 的 Transfer 事件
-    const [outLogs, inLogs] = await Promise.all([
+    // 各自 catch 防止单侧超时导致全部失败
+    const [outResult, inResult] = await Promise.all([
       (publicClient as any).getLogs({
+        address: TOKEN_CONTRACTS,
         topics: [TRANSFER_SIG, paddedAddr, null],
         fromBlock,
         toBlock,
-      }),
+      }).catch(() => [] as any[]),
       (publicClient as any).getLogs({
+        address: TOKEN_CONTRACTS,
         topics: [TRANSFER_SIG, null, paddedAddr],
         fromBlock,
         toBlock,
-      }),
+      }).catch(() => [] as any[]),
     ])
+    const outLogs: any[] = outResult
+    const inLogs: any[] = inResult
 
     // 去重（同一笔 tx 可能同时触发转入+转出）
     const seen = new Set<string>()
