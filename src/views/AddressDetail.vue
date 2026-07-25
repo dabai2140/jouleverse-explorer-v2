@@ -173,7 +173,7 @@ import CoreIdSection from './CoreIdSection.vue'
 import { publicClient } from '../config/client'
 import { encodeJVA, detectAddressFormat, normalizeToHex } from '../utils/jvaddress'
 import { JvLoading, JvPageState, JvHashText, JvAmount } from '../design-system'
-import { initTimeCache, getYearBlockRange, getAvailableYears } from '../utils/timestamp-to-block'
+import { initTimeCache, getYearBlockRange, getAvailableYears, getAvgBlockTime } from '../utils/timestamp-to-block'
 
 const router = useRouter()
 
@@ -385,37 +385,25 @@ const loadTransactions = async (year: number) => {
       return
     }
 
-    // 获取交易详情 + 区块时间戳
-    const uniqueBlocks = [...new Set(allLogs.map(l => l.blockNumber))]
-    const [txDetails, blocks] = await Promise.all([
-      Promise.all(allLogs.map(log =>
-        publicClient.getTransaction({ hash: log.transactionHash }).catch(() => null)
-      )),
-      Promise.all(uniqueBlocks.map(bn =>
-        publicClient.getBlock({ blockNumber: bn }).catch(() => null)
-      )),
-    ])
+    // 从 log topics 中提取 from/to 地址（不需要 getTransaction）
+    // topics[1] = from (32字节左填充地址), topics[2] = to
+    // 用区块号差 × 平均出块时间 估算年龄（不需要 getBlock 逐块查时间戳）
+    const avgSec = getAvgBlockTime()
 
-    const blockTimestamps = new Map<string, bigint>()
-    blocks.forEach(b => { if (b) blockTimestamps.set(b.hash!, b.timestamp) })
-    const blockNumbers = new Map<string, bigint>()
-    blocks.forEach(b => { if (b) blockNumbers.set(b.hash!, b.number!) })
-
-    transactions.value = txDetails
-      .map((tx, _i) => {
-        if (!tx) return null
-        const ts = blockTimestamps.get(tx.blockHash)
-        const age = ts ? formatBlockAge(Number(ts) * 1000) : ''
-        return {
-          hash: tx.hash,
-          from: tx.from,
-          to: tx.to,
-          blockNumber: tx.blockNumber,
-          blockHash: tx.blockHash,
-          age,
-        }
-      })
-      .filter((tx): tx is NonNullable<typeof tx> => tx !== null)
+    transactions.value = allLogs.map(log => {
+      const fromAddr = ('0x' + (log.topics[1] as string).slice(26)) as string
+      const toAddr = ('0x' + (log.topics[2] as string).slice(26)) as string
+      const blockN = Number(log.blockNumber)
+      const estSec = (Number(latestBlock) - blockN) * avgSec
+      const age = formatBlockAgeShort(estSec)
+      return {
+        hash: log.transactionHash,
+        from: fromAddr,
+        to: toAddr,
+        blockNumber: log.blockNumber,
+        age,
+      }
+    })
 
     txLogsLoaded.value = true
     txLoadError.value = false
@@ -429,14 +417,12 @@ const loadTransactions = async (year: number) => {
   }
 }
 
-/** 格式化区块年龄 */
-function formatBlockAge(blockTime: number): string {
-  const now = Date.now()
-  const diff = Math.floor((now - blockTime) / 1000)
-  if (diff < 60) return `${diff} 秒前`
-  if (diff < 3600) return `${Math.floor(diff / 60)} 分钟前`
-  if (diff < 86400) return `${Math.floor(diff / 3600)} 小时前`
-  return `${Math.floor(diff / 86400)} 天前`
+/** 用区块号差估算年龄（无需 RPC） */
+function formatBlockAgeShort(estSec: number): string {
+  if (estSec < 60) return `${Math.floor(estSec)} 秒前`
+  if (estSec < 3600) return `${Math.floor(estSec / 60)} 分钟前`
+  if (estSec < 86400) return `${Math.floor(estSec / 3600)} 小时前`
+  return `${Math.floor(estSec / 86400)} 天前`
 }
 
 const prevYear = () => {

@@ -59,6 +59,13 @@ export function getYearBlockRange(year: number): { fromBlock: bigint; toBlock: b
 }
 
 /**
+ * 获取当前估算的平均出块时间（秒），未初始化时返回默认值 15
+ */
+export function getAvgBlockTime(): number {
+  return avgBlockTime ?? 15.0
+}
+
+/**
  * 获取可用年份列表（从链启动年份到当前年份）
  */
 export function getAvailableYears(_latestBlockNumber: bigint): number[] {
