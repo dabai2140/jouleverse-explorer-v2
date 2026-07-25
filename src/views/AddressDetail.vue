@@ -349,20 +349,29 @@ const loadTransactions = async (year: number) => {
       '0xCb1429da13cE40e75519148e796C6D58dD6b1a8E', // PopBadge
     ]
 
-    // 并行查询：地址作为 sender + 作为 receiver 的 Transfer 事件
-    // 各自 catch 防止单侧超时导致全部失败
+    // ⚠️ viem 的 getLogs 有 bug：会丢弃 topics[1+] 过滤条件
+    // 改用 raw JSON-RPC 请求，确保 topics 参数正确发送
+    const rpcRequest = (publicClient.transport as any).request.bind(publicClient.transport)
+    const toHex = (n: bigint) => '0x' + n.toString(16)
+
     const [outResult, inResult] = await Promise.all([
-      (publicClient as any).getLogs({
-        address: TOKEN_CONTRACTS,
-        topics: [TRANSFER_SIG, paddedAddr, null],
-        fromBlock,
-        toBlock,
+      rpcRequest({
+        method: 'eth_getLogs',
+        params: [{
+          address: TOKEN_CONTRACTS,
+          topics: [TRANSFER_SIG, paddedAddr, null],
+          fromBlock: toHex(fromBlock),
+          toBlock: toHex(toBlock),
+        }],
       }).catch(() => [] as any[]),
-      (publicClient as any).getLogs({
-        address: TOKEN_CONTRACTS,
-        topics: [TRANSFER_SIG, null, paddedAddr],
-        fromBlock,
-        toBlock,
+      rpcRequest({
+        method: 'eth_getLogs',
+        params: [{
+          address: TOKEN_CONTRACTS,
+          topics: [TRANSFER_SIG, null, paddedAddr],
+          fromBlock: toHex(fromBlock),
+          toBlock: toHex(toBlock),
+        }],
       }).catch(() => [] as any[]),
     ])
     const outLogs: any[] = outResult
