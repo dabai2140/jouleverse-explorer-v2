@@ -548,7 +548,7 @@ onMounted(() => {
 
 .all-formats { flex-direction: column; align-items: flex-end; }
 
-.format-list { display: flex; flex-direction: column; gap: 4px; width: 100%; align-items: flex-end; }
+.format-list { display: flex; flex-direction: column; gap: 4px; width: auto; align-items: flex-start; }
 
 .format-row {
   display: flex;
@@ -559,7 +559,8 @@ onMounted(() => {
   cursor: pointer;
   font-size: 0.82rem;
   transition: background var(--jv-duration-fast) var(--jv-ease);
-  width: 100%;
+  width: auto;
+  min-width: fit-content;
 }
 
 .format-row:hover { background: var(--jv-bg-hover); }
