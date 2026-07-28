@@ -123,6 +123,90 @@
       </div>
     </div>
 
+    <!-- ===== 钱包操作(绑定/解绑/发送) ===== -->
+    <div v-if="domainInfo" class="operation-section">
+      <!-- 操作提示 -->
+      <div v-if="operationSuccess" class="operation-msg success">{{ operationSuccess }}</div>
+      <div v-if="operationError" class="operation-msg error">{{ operationError }}</div>
+
+      <!-- 标签切换 -->
+      <div class="op-tabs">
+        <button :class="{ active: activeTab === 'info' }" @click="activeTab = 'info'">🔐 绑定管理</button>
+        <button v-if="domainInfo.isBound" :class="{ active: activeTab === 'send' }" @click="activeTab = 'send'">💸 发送 J</button>
+      </div>
+
+      <!-- 绑定管理面板 -->
+      <div v-if="activeTab === 'info'" class="op-panel">
+        <!-- 未连接钱包 -->
+        <div v-if="!walletStore.isConnected" class="op-connect-prompt">
+          <p>连接钱包后可管理域名绑定</p>
+          <JvActionButton :loading="walletStore.isConnecting" @click="connectWallet">连接钱包</JvActionButton>
+        </div>
+        <!-- 已连接但不是所有者 -->
+        <div v-else-if="!isOwner" class="op-not-owner">
+          <p>当前钱包 {{ walletStore.formatAddress(walletStore.address) }} 不是此域名的所有者</p>
+          <p class="op-hint">只有域名所有者才能绑定/解绑</p>
+        </div>
+        <!-- 已连接且是所有者 -->
+        <div v-else class="op-owner-actions">
+          <div class="op-wallet-info">
+            <span class="op-label">当前钱包</span>
+            <span class="op-address">{{ walletStore.formatAddress(walletStore.address) }}</span>
+            <span class="op-balance">{{ walletStore.formatBalance(walletStore.balance) }} J</span>
+          </div>
+          <div class="op-buttons">
+            <JvActionButton
+              v-if="!domainInfo.isBound"
+              :loading="bindLoading"
+              @click="bindDomain"
+            >
+              绑定到当前地址
+            </JvActionButton>
+            <JvActionButton
+              v-if="domainInfo.isBound"
+              :loading="unbindLoading"
+              type="default"
+              @click="unbindDomain"
+            >
+              解绑
+            </JvActionButton>
+            <button class="op-refresh-btn" @click="refreshDomain">🔄 刷新</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 发送 J 面板 -->
+      <div v-if="activeTab === 'send' && domainInfo.isBound" class="op-panel">
+        <div v-if="!walletStore.isConnected" class="op-connect-prompt">
+          <p>连接钱包后可向此域名发送 J</p>
+          <JvActionButton :loading="walletStore.isConnecting" @click="connectWallet">连接钱包</JvActionButton>
+        </div>
+        <div v-else class="op-send-form">
+          <div class="op-wallet-info">
+            <span class="op-label">发送到</span>
+            <JvHashText :value="domainInfo.boundAddress" type="address" :truncate="8" />
+          </div>
+          <div class="op-wallet-info">
+            <span class="op-label">我的余额</span>
+            <span class="op-balance">{{ walletStore.formatBalance(walletStore.balance) }} J</span>
+          </div>
+          <div class="op-input-row">
+            <input
+              v-model="sendAmount"
+              type="text"
+              placeholder="输入发送数量"
+              class="op-input"
+              :disabled="sendLoading"
+            />
+            <span class="op-input-suffix">J</span>
+          </div>
+          <JvActionButton :loading="sendLoading" :disabled="!sendAmount" @click="sendToDomain">
+            发送 J
+          </JvActionButton>
+        </div>
+      </div>
+    </div>
+
     <!-- ===== 持有者其他域名 ===== -->
     <div v-if="domainInfo && (ownerJnsTotal > 1 || loadingOwnerJns)" class="owner-domains-section">
       <h3>🏷️ 该持有者的其他 JNS 域名</h3>
@@ -187,15 +271,18 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { createPublicClient, http } from 'viem'
+import { createPublicClient, http, parseEther } from 'viem'
 import { JNS_ADDRESS, jnsABI } from '@/contracts/jns'
 import { jouleverseChain } from '@/config/chain'
+import { useWalletStore } from '@/stores/wallet'
+import { config as wagmiConfig } from '@/stores/wallet'
 import { JvActionButton, JvHashText, JvPageState, JvLoading } from '../design-system'
 
 const router = useRouter()
 const route = useRoute()
+const walletStore = useWalletStore()
 
 // ===== 公共客户端 =====
 const publicClient = createPublicClient({
@@ -247,6 +334,108 @@ const RECORD_ICONS: Record<string, string> = {
   'eth address': '💎',
   'bsc': '🟡',
   'polygon': '🟣',
+}
+
+// ===== 操作相关状态 =====
+/** 当前连接钱包是否为该域名的所有者 */
+const isOwner = computed(() => {
+  return !!(walletStore.isConnected && walletStore.address && domainInfo.value &&
+    walletStore.address.toLowerCase() === domainInfo.value.owner.toLowerCase())
+})
+
+/** 绑定/解绑操作状态 */
+const bindLoading = ref(false)
+const unbindLoading = ref(false)
+const operationError = ref('')
+const operationSuccess = ref('')
+const activeTab = ref<'info' | 'send'>('info') // 信息/发送切换
+
+/** 发送操作状态 */
+const sendAmount = ref('')
+const sendLoading = ref(false)
+
+/** 连接钱包 */
+const connectWallet = async () => {
+  try { await walletStore.connect() }
+  catch (e: any) { operationError.value = '钱包连接失败: ' + (e.message || '') }
+}
+
+/** 绑定域名到当前钱包地址 */
+const bindDomain = async () => {
+  if (!domainInfo.value) return
+  operationError.value = ''
+  operationSuccess.value = ''
+  bindLoading.value = true
+  try {
+    const { writeContract, switchChain } = await import('wagmi/actions')
+    // 确保链切换
+    try { await switchChain(wagmiConfig, { chainId: 3666 }) } catch {}
+    const hash = await writeContract(wagmiConfig, {
+      address: JNS_ADDRESS,
+      abi: jnsABI,
+      functionName: 'bind',
+      args: [domainInfo.value.name],
+    })
+    operationSuccess.value = `✅ 绑定交易已提交! Tx: ${hash.slice(0, 10)}...${hash.slice(-6)}`
+    // 等待一段时间后刷新
+    setTimeout(refreshDomain, 8000)
+  } catch (e: any) {
+    if (e.code === 4001) { operationError.value = '用户取消了交易' }
+    else { operationError.value = '绑定失败: ' + (e.message?.slice(0, 80) || '未知错误') }
+  } finally { bindLoading.value = false }
+}
+
+/** 解绑域名 */
+const unbindDomain = async () => {
+  if (!domainInfo.value) return
+  operationError.value = ''
+  operationSuccess.value = ''
+  unbindLoading.value = true
+  try {
+    const { writeContract, switchChain } = await import('wagmi/actions')
+    try { await switchChain(wagmiConfig, { chainId: 3666 }) } catch {}
+    const hash = await writeContract(wagmiConfig, {
+      address: JNS_ADDRESS,
+      abi: jnsABI,
+      functionName: 'unbind',
+      args: [BigInt(domainInfo.value.tokenId)],
+    })
+    operationSuccess.value = `✅ 解绑交易已提交! Tx: ${hash.slice(0, 10)}...${hash.slice(-6)}`
+    setTimeout(refreshDomain, 8000)
+  } catch (e: any) {
+    if (e.code === 4001) { operationError.value = '用户取消了交易' }
+    else { operationError.value = '解绑失败: ' + (e.message?.slice(0, 80) || '未知错误') }
+  } finally { unbindLoading.value = false }
+}
+
+/** 刷新当前域名信息 */
+const refreshDomain = async () => {
+  if (domainInfo.value) {
+    await searchDomain(domainInfo.value.name + '.j')
+  }
+}
+
+/** 发送 J 到域名的绑定地址 */
+const sendToDomain = async () => {
+  if (!domainInfo.value || !domainInfo.value.isBound || !sendAmount.value) return
+  operationError.value = ''
+  operationSuccess.value = ''
+  sendLoading.value = true
+  try {
+    const { sendTransaction, switchChain } = await import('wagmi/actions')
+    try { await switchChain(wagmiConfig, { chainId: 3666 }) } catch {}
+    const amount = parseEther(sendAmount.value)
+    const hash = await sendTransaction(wagmiConfig, {
+      to: domainInfo.value.boundAddress as `0x${string}`,
+      value: amount,
+    })
+    operationSuccess.value = `✅ 已发送 ${sendAmount.value} J! Tx: ${hash.slice(0, 10)}...${hash.slice(-6)}`
+    sendAmount.value = ''
+    await walletStore.refreshBalances()
+  } catch (e: any) {
+    if (e.code === 4001) { operationError.value = '用户取消了交易' }
+    else { operationError.value = '发送失败: ' + (e.message?.slice(0, 80) || '未知错误') }
+  } finally { sendLoading.value = false }
 }
 
 // ===== 方法 =====
@@ -776,6 +965,144 @@ h1 { font-size: 24px; color: var(--jv-text-primary); margin: 0; }
 }
 
 /* 反查区域 */
+/* 操作区域 */
+.operation-section {
+  background: var(--jv-bg-surface);
+  border: 1px solid var(--jv-border);
+  border-radius: var(--jv-radius-lg);
+  padding: 20px 24px;
+  margin-bottom: 20px;
+}
+
+.operation-msg {
+  padding: 10px 14px;
+  border-radius: var(--jv-radius-md);
+  font-size: 13px;
+  margin-bottom: 12px;
+  word-break: break-all;
+}
+.operation-msg.success {
+  background: var(--jv-success-bg, #e8f5e9);
+  color: var(--jv-success, #2e7d32);
+  border: 1px solid var(--jv-success, #2e7d32);
+}
+.operation-msg.error {
+  background: var(--jv-error-bg);
+  color: var(--jv-error);
+  border: 1px solid var(--jv-error);
+}
+
+.op-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 16px;
+}
+.op-tabs button {
+  flex: 1;
+  padding: 10px;
+  border: none;
+  background: var(--jv-bg-subtle);
+  color: var(--jv-text-muted);
+  border-radius: var(--jv-radius-md) var(--jv-radius-md) 0 0;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all var(--jv-duration-fast) var(--jv-ease);
+}
+.op-tabs button.active {
+  background: var(--jv-bg-surface);
+  color: var(--jv-brand);
+  border-bottom: 2px solid var(--jv-brand);
+}
+
+.op-panel {
+  min-height: 80px;
+}
+
+.op-connect-prompt,
+.op-not-owner {
+  text-align: center;
+  padding: 20px;
+  color: var(--jv-text-secondary);
+  font-size: 14px;
+}
+.op-connect-prompt p,
+.op-not-owner p { margin: 0 0 12px 0; }
+.op-hint { font-size: 13px; color: var(--jv-text-muted); }
+
+.op-wallet-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: var(--jv-bg-subtle);
+  border-radius: var(--jv-radius-md);
+  margin-bottom: 12px;
+}
+.op-label {
+  font-size: 13px;
+  color: var(--jv-text-muted);
+  flex-shrink: 0;
+}
+.op-address {
+  font-family: monospace;
+  font-size: 14px;
+  color: var(--jv-text-primary);
+}
+.op-balance {
+  margin-left: auto;
+  font-size: 14px;
+  color: var(--jv-brand);
+  font-weight: 600;
+}
+
+.op-buttons {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.op-refresh-btn {
+  background: var(--jv-bg-subtle);
+  color: var(--jv-text-muted);
+  border: 1px solid var(--jv-border);
+  padding: 8px 16px;
+  border-radius: var(--jv-radius-md);
+  cursor: pointer;
+  font-size: 14px;
+  transition: all var(--jv-duration-fast) var(--jv-ease);
+}
+.op-refresh-btn:hover {
+  background: var(--jv-bg-hover);
+  color: var(--jv-text-primary);
+}
+
+.op-send-form {}
+.op-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.op-input {
+  flex: 1;
+  padding: 10px 14px;
+  border: 1px solid var(--jv-border);
+  border-radius: var(--jv-radius-md);
+  font-size: 16px;
+  background: var(--jv-bg-surface);
+  color: var(--jv-text-primary);
+}
+.op-input:focus {
+  outline: none;
+  border-color: var(--jv-border-focus);
+}
+.op-input-suffix {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--jv-text-muted);
+}
+
 .reverse-lookup-section {
   margin-top: 24px;
   background: var(--jv-bg-subtle);
