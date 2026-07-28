@@ -45,6 +45,11 @@ const routes = [
     path: '/jns',
     name: 'jnsQuery',
     component: JNSQuery
+  },
+  {
+    path: '/jns/:name',
+    name: 'jnsDetail',
+    component: JNSQuery
   }
 ]
 

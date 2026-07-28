@@ -89,7 +89,7 @@
             共持有 <strong>{{ jnsTotal }}</strong> 个 JNS 域名{{ jnsTotal > JNS_MAX_DISPLAY ? `，仅显示前 ${JNS_MAX_DISPLAY} 个` : '' }}
           </p>
           <div class="jns-list">
-            <span v-for="name in jnsNames" :key="name" class="jns-tag">{{ name }}.j</span>
+            <span v-for="name in jnsNames" :key="name" class="jns-tag" @click="goJnsDetail(name)">{{ name }}.j</span>
           </div>
           <div v-if="jnsLoaded < Math.min(jnsTotal, JNS_MAX_DISPLAY)" class="jns-more">
             <button class="btn-load-more" :disabled="loadingJnsHoldings" @click="loadMoreJns">
@@ -301,6 +301,11 @@ const loadJnsHoldings = async () => {
     } catch { }
   } catch { jnsTotal.value = 0 }
   finally { loadingJnsHoldings.value = false }
+}
+
+/** 跳转到 JNS 域名详情页 */
+const goJnsDetail = (name: string) => {
+  router.push(`/jns/${name}`)
 }
 
 const loadMoreJns = async () => {
