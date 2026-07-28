@@ -132,7 +132,7 @@
       <!-- 标签切换 -->
       <div class="op-tabs">
         <button :class="{ active: activeTab === 'info' }" @click="activeTab = 'info'">🔐 绑定管理</button>
-        <button v-if="domainInfo.isBound" :class="{ active: activeTab === 'send' }" @click="activeTab = 'send'">💸 发送 J</button>
+        <button :class="{ active: activeTab === 'send' }" @click="activeTab = 'send'">📤 转移域名</button>
       </div>
 
       <!-- 绑定管理面板 -->
@@ -175,34 +175,39 @@
         </div>
       </div>
 
-      <!-- 发送 J 面板 -->
-      <div v-if="activeTab === 'send' && domainInfo.isBound" class="op-panel">
+      <!-- 转移域名面板 -->
+      <div v-if="activeTab === 'send'" class="op-panel">
         <div v-if="!walletStore.isConnected" class="op-connect-prompt">
-          <p>连接钱包后可向此域名发送 J</p>
+          <p>连接钱包后可转移此域名给他人</p>
           <JvActionButton :loading="walletStore.isConnecting" @click="connectWallet">连接钱包</JvActionButton>
         </div>
         <div v-else class="op-send-form">
           <div class="op-wallet-info">
-            <span class="op-label">发送到</span>
-            <JvHashText :value="domainInfo.boundAddress" type="address" :truncate="8" />
+            <span class="op-label">域名</span>
+            <span class="op-address">{{ domainInfo.name }}.j</span>
+            <span class="op-balance">#{{ domainInfo.tokenId }}</span>
           </div>
           <div class="op-wallet-info">
-            <span class="op-label">我的余额</span>
-            <span class="op-balance">{{ walletStore.formatBalance(walletStore.balance) }} J</span>
+            <span class="op-label">当前所有者</span>
+            <JvHashText :value="domainInfo.owner" type="address" :truncate="8" />
+          </div>
+          <div v-if="transferError" class="op-msg-error">{{ transferError }}</div>
+          <div class="op-hint">
+            <p>输入接收方的地址（支持 HEX 或 JVA B32 格式）</p>
           </div>
           <div class="op-input-row">
             <input
-              v-model="sendAmount"
+              v-model="transferAddress"
               type="text"
-              placeholder="输入发送数量"
+              placeholder="例如: j3qz9... 或 0x..."
               class="op-input"
-              :disabled="sendLoading"
+              :disabled="transferLoading"
             />
-            <span class="op-input-suffix">J</span>
           </div>
-          <JvActionButton :loading="sendLoading" :disabled="!sendAmount" @click="sendToDomain">
-            发送 J
+          <JvActionButton :loading="transferLoading" :disabled="!transferAddress" @click="transferJnsDomain">
+            转移域名 {{ domainInfo.name }}.j
           </JvActionButton>
+          <p class="op-caution">⚠️ 转移后将失去此域名的所有权，此操作不可逆。</p>
         </div>
       </div>
     </div>
@@ -273,10 +278,11 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { createPublicClient, http, parseEther } from 'viem'
+import { createPublicClient, http } from 'viem'
 import { JNS_ADDRESS, jnsABI } from '@/contracts/jns'
 import { jouleverseChain } from '@/config/chain'
 import { useWalletStore } from '@/stores/wallet'
+import { detectAddressFormat, decodeJVA } from '@/utils/jvaddress'
 import { config as wagmiConfig } from '@/stores/wallet'
 import { JvActionButton, JvHashText, JvPageState, JvLoading } from '../design-system'
 
@@ -348,11 +354,12 @@ const bindLoading = ref(false)
 const unbindLoading = ref(false)
 const operationError = ref('')
 const operationSuccess = ref('')
-const activeTab = ref<'info' | 'send'>('info') // 信息/发送切换
+const activeTab = ref<'info' | 'send'>('info') // 信息/转移切换
 
-/** 发送操作状态 */
-const sendAmount = ref('')
-const sendLoading = ref(false)
+/** 转移操作状态 */
+const transferAddress = ref('')
+const transferLoading = ref(false)
+const transferError = ref('')
 
 /** 连接钱包 */
 const connectWallet = async () => {
@@ -415,27 +422,41 @@ const refreshDomain = async () => {
   }
 }
 
-/** 发送 J 到域名的绑定地址 */
-const sendToDomain = async () => {
-  if (!domainInfo.value || !domainInfo.value.isBound || !sendAmount.value) return
+/** 转移 JNS 域名到指定地址 */
+const transferJnsDomain = async () => {
+  if (!domainInfo.value || !transferAddress.value) return
+  const rawAddr = transferAddress.value.trim()
+  
+  // 地址格式检测：支持 hex / B32 / full JVA
+  const format = detectAddressFormat(rawAddr)
+  let toHex: string | null = null
+  if (format === 'hex') toHex = rawAddr
+  else if (format === 'b32' || format === 'full') {
+    const decoded = decodeJVA(rawAddr)
+    if (decoded.success) toHex = decoded.hexAddress
+    else { transferError.value = 'B32 地址格式无效'; return }
+  } else { transferError.value = '请输入有效的地址(HEX 或 JVA B32 格式)'; return }
+  
+  if (!toHex || !walletStore.address) return
+  transferError.value = ''
   operationError.value = ''
   operationSuccess.value = ''
-  sendLoading.value = true
+  transferLoading.value = true
   try {
-    const { sendTransaction, switchChain } = await import('wagmi/actions')
+    const { writeContract, switchChain } = await import('wagmi/actions')
     try { await switchChain(wagmiConfig, { chainId: 3666 }) } catch {}
-    const amount = parseEther(sendAmount.value)
-    const hash = await sendTransaction(wagmiConfig, {
-      to: domainInfo.value.boundAddress as `0x${string}`,
-      value: amount,
+    const hash = await writeContract(wagmiConfig, {
+      address: JNS_ADDRESS,
+      abi: jnsABI,
+      functionName: 'safeTransferFrom',
+      args: [walletStore.address as `0x${string}`, toHex as `0x${string}`, BigInt(domainInfo.value.tokenId)],
     })
-    operationSuccess.value = `✅ 已发送 ${sendAmount.value} J! Tx: ${hash.slice(0, 10)}...${hash.slice(-6)}`
-    sendAmount.value = ''
-    await walletStore.refreshBalances()
+    operationSuccess.value = `✅ 域名已转移! Tx: ${hash.slice(0, 10)}...${hash.slice(-6)}`
+    transferAddress.value = ''
   } catch (e: any) {
     if (e.code === 4001) { operationError.value = '用户取消了交易' }
-    else { operationError.value = '发送失败: ' + (e.message?.slice(0, 80) || '未知错误') }
-  } finally { sendLoading.value = false }
+    else { operationError.value = '转移失败: ' + (e.message?.slice(0, 80) || '未知错误') }
+  } finally { transferLoading.value = false }
 }
 
 // ===== 方法 =====
@@ -1078,6 +1099,23 @@ h1 { font-size: 24px; color: var(--jv-text-primary); margin: 0; }
 }
 
 .op-send-form {}
+.op-msg-error {
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  font-size: 13px;
+  background: var(--jv-error-bg);
+  border: 1px solid var(--jv-error);
+  border-radius: var(--jv-radius-md);
+  color: var(--jv-error);
+}
+.op-caution {
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--jv-warning, #e65100);
+  padding: 8px 12px;
+  background: color-mix(in srgb, var(--jv-warning, #e65100) 8%, transparent);
+  border-radius: var(--jv-radius-md);
+}
 .op-input-row {
   display: flex;
   align-items: center;
