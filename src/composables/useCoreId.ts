@@ -1,4 +1,4 @@
-import { ref, unref } from 'vue'
+import { ref, unref, computed } from 'vue'
 import { isAddress } from 'viem'
 import { publicClient } from '../config/client'
 import { JVCORE_ADDRESS, jvcoreABI } from '../contracts/jvcore'
@@ -7,7 +7,8 @@ import { parseTokenURI } from '../utils/nftMetadata'
 import type { CoreIdInfo, PopHistoryEntry } from '../types/coreid'
 
 // 超过此数量只显示最近的，按 tokenId 降序取高位 index（最新先入）
-const MAX_POP_DISPLAY = 120
+const MAX_POP_DISPLAY = 50
+const POP_BATCH_SIZE = 10
 
 export function useCoreId(address: string) {
   const addr = unref(address)
@@ -15,6 +16,8 @@ export function useCoreId(address: string) {
   const popHistory = ref<PopHistoryEntry[]>([])
   const popHistoryTotal = ref(0)
   const popHistoryTruncated = ref(false)
+  const popDisplayCount = ref(POP_BATCH_SIZE)
+  const hasMorePop = computed(() => popDisplayCount.value < Math.min(popHistory.value.length, MAX_POP_DISPLAY))
   const isLoading = ref(false)
   const error = ref<string | null>(null)
 
@@ -121,8 +124,8 @@ export function useCoreId(address: string) {
       return { tokenId, metadata, monthLabel, isValid }
     })
 
-    // 按tokenId升序排序，与v1一致
-    result.sort((a, b) => (a.tokenId < b.tokenId ? -1 : a.tokenId > b.tokenId ? 1 : 0))
+    // 按tokenId降序排序（最新在前），方便用户查看近期签到
+    result.sort((a, b) => (a.tokenId > b.tokenId ? -1 : a.tokenId < b.tokenId ? 1 : 0))
     popHistory.value = result
   }
 
@@ -144,11 +147,19 @@ export function useCoreId(address: string) {
     }
   }
 
+  function loadMorePop() {
+    const next = popDisplayCount.value + POP_BATCH_SIZE
+    popDisplayCount.value = Math.min(next, popHistory.value.length, MAX_POP_DISPLAY)
+  }
+
   return {
     coreIds,
     popHistory,
     popHistoryTotal,
     popHistoryTruncated,
+    popDisplayCount,
+    hasMorePop,
+    loadMorePop,
     isLoading,
     error,
     load,
