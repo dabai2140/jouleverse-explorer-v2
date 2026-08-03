@@ -80,8 +80,28 @@
           </div>
 
           <div v-if="txHash" class="ct-tx">
-            <h4>交易已发送</h4>
+            <h4>交易</h4>
             <JvHashText :value="txHash" :truncate="0" :type="'tx'" />
+
+            <div v-if="txStatus === 'pending'" class="ct-tx-badge pending">
+              <span class="spinner"></span> 已提交，等待链上确认...
+            </div>
+            <div v-else-if="txStatus === 'success'" class="ct-tx-badge success">✅ 交易成功</div>
+            <div v-else-if="txStatus === 'reverted'" class="ct-tx-badge reverted">❌ 交易失败（reverted）</div>
+
+            <div v-if="receipt" class="ct-receipt">
+              <div class="ct-receipt-row">
+                <span>状态</span>
+                <b :class="receipt.status === 'success' ? 'text-success' : 'text-error'">
+                  {{ receipt.status === 'success' ? '成功' : '失败' }}
+                </b>
+              </div>
+              <div class="ct-receipt-row"><span>区块高度</span><b>#{{ receipt.blockNumber.toString() }}</b></div>
+              <div class="ct-receipt-row"><span>Gas 消耗</span><b>{{ receipt.gasUsed.toString() }}</b></div>
+              <div class="ct-receipt-row"><span>Gas 价格</span><b>{{ formatGasPrice(receipt.effectiveGasPrice) }}</b></div>
+              <div class="ct-receipt-row"><span>事件日志</span><b>{{ receipt.logs.length }} 条</b></div>
+            </div>
+
             <a
               class="ct-tx-link"
               :href="`/#/tx/${txHash}`"
@@ -98,7 +118,9 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { getPublicClient } from '@wagmi/core'
-import { writeContract } from 'wagmi/actions'
+import { writeContract, waitForTransactionReceipt } from 'wagmi/actions'
+import { WaitForTransactionReceiptTimeoutError } from 'viem'
+import type { TransactionReceipt } from 'viem'
 import { config, useWalletStore } from '../stores/wallet'
 import JvHashText from '../design-system/components/JvHashText.vue'
 import JvActionButton from '../design-system/components/JvActionButton.vue'
@@ -134,12 +156,87 @@ const argValues = ref<(string | boolean)[]>([])
 const result = ref<string | null>(null)
 const loading = ref(false)
 const txHash = ref<string>('')
+const txStatus = ref<'pending' | 'success' | 'reverted' | ''>('')
+const receipt = ref<TransactionReceipt | null>(null)
+
+// 交易确认等待超时（区块间隔约 15s，120s 覆盖约 8 个块）
+const TX_CONFIRM_TIMEOUT_MS = 120_000
 
 function selectFunction(fn: AbiFunction) {
   selectedFn.value = fn
   argValues.value = fn.inputs.map((input) => (input.type === 'bool' ? false : ''))
   result.value = null
   txHash.value = ''
+  txStatus.value = ''
+  receipt.value = null
+}
+
+// 解码 revert data：Error(string) 与 Panic(uint256)
+function decodeRevertReason(data: string): string {
+  try {
+    if (data.startsWith('0x08c379a0')) {
+      // Error(string) — require/revert 带消息
+      const body = data.slice(10)
+      const offset = parseInt(body.slice(0, 64), 16) * 2
+      const len = parseInt(body.slice(offset + 64, offset + 128), 16)
+      const content = body.slice(offset + 128, offset + 128 + len * 2)
+      return Buffer.from(content, 'hex').toString('utf8')
+    }
+    if (data.startsWith('0x4e487b71')) {
+      // Panic(uint256) — 编译器内建错误
+      const code = BigInt('0x' + data.slice(10, 74))
+      const panicMap: Record<string, string> = {
+        '1': 'assert 失败', '17': '算术溢出', '18': '除以零', '33': '枚举值越界',
+        '34': '存储字节数组越界', '49': 'pop 空数组', '50': '数组越界', '65': '分配内存溢出', '81': '内部函数调用错误',
+      }
+      return `Panic(${code}): ${panicMap[code.toString()] || '未知错误'}`
+    }
+    return `revert data: ${data.slice(0, 18)}...`
+  } catch {
+    return ''
+  }
+}
+
+// 通过 eth_call 重放交易获取合约 revert 原因
+async function fetchRevertReason(hash: `0x${string}`, blockNumber: bigint): Promise<string | null> {
+  try {
+    const tx = await publicClient.getTransaction({ hash })
+    // 在交易执行时的区块状态上重放调用，捕获 revert data
+    const blockTag = `0x${(blockNumber - 1n).toString(16)}`
+    await publicClient.request({
+      method: 'eth_call',
+      params: [{ from: tx.from, to: tx.to, data: tx.input, value: tx.value }, blockTag],
+    } as never)
+    return null // 重放成功说明当前状态已不 revert（状态已变），无原因可展示
+  } catch (e: unknown) {
+    const err = e as { data?: string; cause?: { data?: string; cause?: { data?: string } } }
+    const data = err.data || err.cause?.data || err.cause?.cause?.data
+    if (data && data !== '0x') {
+      const reason = decodeRevertReason(data)
+      if (reason) return reason
+    }
+    return null
+  }
+}
+
+// 链上已返回 receipt（无论成功或失败）→ 链上的确定结果，如实展示
+// - success：交易成功
+// - reverted：上链失败，展示链返回的错误详情
+async function applyReceipt(rcpt: TransactionReceipt, notice = '') {
+  receipt.value = rcpt
+  txStatus.value = rcpt.status === 'success' ? 'success' : 'reverted'
+  const prefix = notice ? notice + '\n' : ''
+  if (rcpt.status === 'success') {
+    result.value = `${prefix}✅ 交易已确认`
+  } else {
+    result.value = `${prefix}❌ 上链失败（交易已回滚）`
+    try {
+      const reason = await fetchRevertReason(rcpt.transactionHash, rcpt.blockNumber)
+      if (reason) result.value = `${prefix}❌ 上链失败，错误信息是：${reason}`
+    } catch {
+      // 拿不到 revert 原因时保持通用提示
+    }
+  }
 }
 
 function placeholderFor(type: string): string {
@@ -172,6 +269,12 @@ function parseArg(raw: string | boolean, type: string): unknown {
   return raw
 }
 
+function formatGasPrice(price: bigint | undefined): string {
+  if (price === undefined) return '-'
+  const gwei = Number(price) / 1e9
+  return `${gwei.toFixed(2)} Gwei`
+}
+
 function formatResult(data: unknown): string {
   const fmt = (v: unknown): unknown => {
     if (typeof v === 'bigint') return v.toString()
@@ -196,6 +299,8 @@ async function execute() {
   loading.value = true
   result.value = null
   txHash.value = ''
+  txStatus.value = ''
+  receipt.value = null
   try {
     const args = fn.inputs.map((_, i) => parseArg(argValues.value[i], fn.inputs[i].type))
     if (fn.stateMutability === 'view' || fn.stateMutability === 'pure') {
@@ -221,7 +326,32 @@ async function execute() {
         args: args as never,
       })
       txHash.value = hash
-      result.value = '✅ 交易已提交'
+      txStatus.value = 'pending'
+      try {
+        // 链上能返回 receipt（无论成功/失败）即说明交易已上链，属于链上结果，如实展示
+        let replacedNotice = ''
+        const rcpt = await waitForTransactionReceipt(config, {
+          hash,
+          timeout: TX_CONFIRM_TIMEOUT_MS,
+          onReplaced: (r) => {
+            const reasonMap = { cancelled: '已取消', replaced: '已被替换', repriced: '已加速替换' } as const
+            replacedNotice = `⚠️ 原交易${reasonMap[r.reason] || '被替换'}，新交易 ${r.transaction.hash.slice(0, 10)}...`
+          },
+        })
+        applyReceipt(rcpt, replacedNotice)
+      } catch (e: unknown) {
+        if (e instanceof WaitForTransactionReceiptTimeoutError) {
+          // 仅真正超时才提示超时，不自动轮询，请用户稍后手工刷新查看
+          result.value = `⚠️ ${TX_CONFIRM_TIMEOUT_MS / 1000}秒内交易未确认，请稍后手工刷新页面查看最新状态`
+          txStatus.value = ''
+        } else {
+          // 其他错误（网络中断、RPC 异常等）如实说明错误类型与详情
+          const name = e instanceof Error ? e.name : '未知错误'
+          const msg = e instanceof Error ? e.message : String(e)
+          result.value = `❌ ${name}：${msg}`
+          txStatus.value = ''
+        }
+      }
     }
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e)
@@ -466,6 +596,53 @@ async function execute() {
   border-top: 1px solid var(--jv-border);
   padding-top: 14px;
 }
+
+.ct-tx-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 6px 14px;
+  border-radius: var(--jv-radius-full);
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.ct-tx-badge.pending { background: var(--jv-warning-bg); color: var(--jv-warning); }
+.ct-tx-badge.success { background: var(--jv-success-bg); color: var(--jv-success); }
+.ct-tx-badge.reverted { background: var(--jv-error-bg); color: var(--jv-error); }
+
+.spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: ct-spin 0.8s linear infinite;
+}
+
+@keyframes ct-spin { to { transform: rotate(360deg); } }
+
+.ct-receipt {
+  margin-top: 12px;
+  border: 1px solid var(--jv-border);
+  border-radius: var(--jv-radius-md);
+  overflow: hidden;
+}
+
+.ct-receipt-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  font-size: 0.82rem;
+  font-family: var(--jv-font-mono);
+}
+
+.ct-receipt-row:nth-child(odd) { background: var(--jv-bg-subtle); }
+.ct-receipt-row span { color: var(--jv-text-muted); }
+.text-success { color: var(--jv-success); }
+.text-error { color: var(--jv-error); }
 
 .ct-tx-link {
   display: inline-block;
