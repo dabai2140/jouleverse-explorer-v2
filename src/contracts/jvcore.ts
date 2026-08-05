@@ -31,6 +31,13 @@ export const jvcoreABI = [
   },
   {
     inputs: [{ internalType: 'uint256', name: 'tokenId', type: 'uint256' }],
+    name: 'ownerOf',
+    outputs: [{ internalType: 'address', name: '', type: 'address' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'uint256', name: 'tokenId', type: 'uint256' }],
     name: 'isLiveness',
     outputs: [{ internalType: 'bool', name: '', type: 'bool' }],
     stateMutability: 'view',

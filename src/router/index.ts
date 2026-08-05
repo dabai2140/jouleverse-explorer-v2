@@ -8,6 +8,7 @@ import JNSQuery from '../views/JNSQuery.vue'
 import CoreCheckinStats from '../views/CoreCheckinStats.vue'
 import ToolsHome from '../views/ToolsHome.vue'
 import ContractToolView from '../views/ContractToolView.vue'
+import MerkleProofGenerator from '../views/MerkleProofGenerator.vue'
 
 const routes = [
   {
@@ -30,6 +31,11 @@ const routes = [
     name: 'contractTool',
     component: ContractToolView,
     props: true
+  },
+  {
+    path: '/tools/merkle',
+    name: 'merkleProofGenerator',
+    component: MerkleProofGenerator
   },
   {
     path: '/blocks',
