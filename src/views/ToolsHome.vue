@@ -89,24 +89,19 @@
           </div>
         </a>
 
-        <a
-          class="tool-card"
-          href="https://jscan.jnsdao.com/tools/airdrop/merkle-proof-generator.html"
-          target="_blank"
-          rel="noopener"
-        >
+        <router-link to="/tools/merkle" class="tool-card">
           <div class="tool-card-header">
             <h3 class="tool-card-title">
               <span class="tool-icon">🌳</span>
               默克尔证明生成器
             </h3>
-            <span class="tool-status status-pending">V1 待迁移</span>
+            <span class="tool-status status-migrated">已迁移</span>
           </div>
-          <p class="tool-desc">为 Core 空投生成默克尔证明，验证空投资格（V1 版本）</p>
+          <p class="tool-desc">为 Core 空投生成默克尔证明：数据校验、地址一致性检查、Merkle Root 与 Proofs 下载</p>
           <div class="tool-card-footer">
-            <span class="tool-link">打开工具 ↗</span>
+            <span class="tool-link">打开 →</span>
           </div>
-        </a>
+        </router-link>
       </div>
     </section>
 

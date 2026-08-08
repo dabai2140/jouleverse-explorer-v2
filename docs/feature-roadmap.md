@@ -80,7 +80,12 @@
 - **背景**：V1 工具集入口（`/tools/index.html`）卡片式布局，但框架/风格与主站不统一（Bootstrap 3 + web3.js + 外部 CDN），需按 V2 主站框架（Vue 3 + design-system）重写
 - **方案**：先建 V2 `/tools` 入口页（卡片式分类，未迁移工具外链 V1），再逐步迁移：①合约交互工具（core+contractx 合并，viem 重写）②默克尔证明生成器 ③JNSVote（随 P3-1）
 - **详细方案**：见 `docs/tools-migration.md`
-- **状态**：📋 待开发
+- **进展**：
+  - ✅ 入口页（PR#8，2026-08-01）
+  - ✅ 合约交互工具迁移 — toolbox 注册表 + 通用 ContractTool 组件（PR#9，2026-08-03；PR#10 交易监听/WS 推送 2026-08-04）
+  - ✅ 默克尔证明生成器迁移（2026-08-05）— `MerkleProofGenerator.vue` + `/tools/merkle`，OZ v1.0.8 兼容算法（viem 重写，已验证 root/proof 与官方库一致）
+  - ⏳ 剩余：JNSVote 投票（随 P3-1）
+- **状态**：🟡 进行中（剩余 JNSVote）
 
 #### ✅ P2-1：全网 Core ID 签到统计页 `/#/core/checkin`（已完成，2026-06-24）
 - **来源**：v1 `views/coreCheckInInfo.html` + `coreCheckInInfoController.js`（2026年新增，规划文档未覆盖）
