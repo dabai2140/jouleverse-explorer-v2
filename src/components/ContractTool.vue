@@ -15,6 +15,9 @@
       </div>
     </div>
 
+    <!-- 📌 重点关注：pin 字段自动读取展示 -->
+    <PinPanel v-if="contract.pins && contract.pins.length > 0" :contract="contract" />
+
     <div class="ct-body">
       <!-- 函数列表 -->
       <div class="ct-fn-list">
@@ -124,6 +127,7 @@ import type { TransactionReceipt } from 'viem'
 import { config, useWalletStore } from '../stores/wallet'
 import JvHashText from '../design-system/components/JvHashText.vue'
 import JvActionButton from '../design-system/components/JvActionButton.vue'
+import PinPanel from './PinPanel.vue'
 import type { ToolboxContract } from '../contracts/toolbox'
 
 const props = defineProps<{ contract: ToolboxContract }>()
