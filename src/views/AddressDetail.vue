@@ -167,6 +167,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { formatEther } from 'viem'
 import { formatAddress } from '../utils/format'
+import { fetchJnsHoldingBatch } from '../utils/jns-holdings'
 import { WJ_ADDRESS, wjABI } from '../contracts/wj'
 import { JNS_ADDRESS, jnsABI } from '../contracts/jns'
 import WJOperations from './WJOperations.vue'
@@ -279,22 +280,14 @@ const loadJnsName = async () => {
 const loadJnsHoldings = async () => {
   loadingJnsHoldings.value = true
   try {
-    const total = await publicClient.readContract({ address: JNS_ADDRESS, abi: jnsABI, functionName: 'balanceOf', args: [hexAddress.value as `0x${string}`] }) as bigint
-    jnsTotal.value = Number(total)
-    if (jnsTotal.value === 0) return
-    try {
-      const end = Math.min(JNS_BATCH_SIZE, Math.min(jnsTotal.value, JNS_MAX_DISPLAY))
-      const tokenIds = await Promise.all(
-        Array.from({ length: end }, (_, i) => BigInt(i)).map(idx =>
-          publicClient.readContract({ address: JNS_ADDRESS, abi: jnsABI, functionName: 'tokenOfOwnerByIndex', args: [hexAddress.value as `0x${string}`, idx] }) as Promise<bigint>
-        )
-      )
-      const names = await Promise.all(
-        tokenIds.map(id => publicClient.readContract({ address: JNS_ADDRESS, abi: jnsABI, functionName: '_allTokensName', args: [id] }) as Promise<string>)
-      )
-      jnsNames.value.push(...names)
-      jnsLoaded.value = end
-    } catch { }
+    // multicall 聚合：balanceOf + tokenOfOwnerByIndex×10 + _allTokensName×10 → 2 次 RPC
+    const { balance, names } = await fetchJnsHoldingBatch(hexAddress.value as `0x${string}`, 0, JNS_BATCH_SIZE, true)
+    const total = Number(balance ?? 0n)
+    jnsTotal.value = total
+    if (total === 0) return
+    const end = Math.min(JNS_BATCH_SIZE, Math.min(total, JNS_MAX_DISPLAY))
+    jnsNames.value.push(...names.slice(0, end))
+    jnsLoaded.value = Math.min(end, names.length)
   } catch { jnsTotal.value = 0 }
   finally { loadingJnsHoldings.value = false }
 }
@@ -310,16 +303,9 @@ const loadMoreJns = async () => {
   try {
     const start = jnsLoaded.value
     const end = Math.min(start + JNS_BATCH_SIZE, Math.min(jnsTotal.value, JNS_MAX_DISPLAY))
-    const tokenIds = await Promise.all(
-      Array.from({ length: end - start }, (_, i) => BigInt(start + i)).map(idx =>
-        publicClient.readContract({ address: JNS_ADDRESS, abi: jnsABI, functionName: 'tokenOfOwnerByIndex', args: [hexAddress.value as `0x${string}`, idx] }) as Promise<bigint>
-      )
-    )
-    const names = await Promise.all(
-      tokenIds.map(id => publicClient.readContract({ address: JNS_ADDRESS, abi: jnsABI, functionName: '_allTokensName', args: [id] }) as Promise<string>)
-    )
+    const { names } = await fetchJnsHoldingBatch(hexAddress.value as `0x${string}`, start, end - start, false)
     jnsNames.value.push(...names)
-    jnsLoaded.value = end
+    jnsLoaded.value = Math.min(end, start + names.length)
   } catch { }
   finally { loadingJnsHoldings.value = false }
 }
