@@ -156,6 +156,28 @@ function coerceArg(v: PinValue, type: string): unknown {
 
 // ---------- 加载 ----------
 
+// 收集 pin 的全部表达式（args / expr / cond），用于判断依赖
+function pinExprs(p: { args?: string[]; expr?: string; cond?: { expr: string } }): string[] {
+  return [
+    ...(p.args ?? []),
+    ...(p.expr ? [p.expr] : []),
+    ...(p.cond?.expr ? [p.cond.expr] : []),
+  ]
+}
+
+// 判断表达式是否引用了 env 中尚未计算的值（$v 是当前函数返回值，不算外部依赖）
+function needsEnvFlush(p: { args?: string[]; expr?: string; cond?: { expr: string } }, env: PinEnv): boolean {
+  for (const expr of pinExprs(p)) {
+    const refs = expr.match(/\$([\w\u4e00-\u9fa5]+)/g) || []
+    for (const ref of refs) {
+      const name = ref.slice(1)
+      if (name === 'v') continue
+      if (!(name in env)) return true
+    }
+  }
+  return false
+}
+
 async function load() {
   if (loading.value) return
   const pins = props.contract.pins
@@ -169,47 +191,89 @@ async function load() {
     const address = props.contract.address
     const results: PinItem[] = []
 
+    // 波次聚合：无相互依赖的 fn pin 合并为一次 multicall
+    let wave: { p: PinConfig; item: PinItem }[] = []
+
+    const flushWave = async () => {
+      if (wave.length === 0) return
+      const calls = wave.map(({ p }) => {
+        const fnDef = (abi as unknown as { name: string; inputs: { type: string }[] }[]).find(
+          (x) => x.name === p.fn
+        )
+        if (!fnDef) throw new Error(`ABI 中无函数 ${p.fn}`)
+        const args = (p.args ?? []).map((expr, i) => {
+          const v = evaluatePinExpr(expr, env)
+          return coerceArg(v, fnDef.inputs[i]?.type ?? 'string')
+        })
+        return {
+          address,
+          abi: abi as never,
+          functionName: p.fn as never,
+          args: args as never,
+        }
+      })
+      // 同合约多调用聚合为 1 次 RPC（multicall3 2026-08-11 自部署）
+      const res = await publicClient.multicall({ contracts: calls, allowFailure: true })
+      wave.forEach(({ p, item }, i) => {
+        const r = res[i]
+        if (r.status === 'failure') {
+          item.error = '调用失败'
+          return
+        }
+        try {
+          const raw = toEnvValue(r.result)
+          const finalValue = p.expr
+            ? evaluatePinExpr(p.expr, { ...env, v: raw })
+            : raw
+          env[p.label] = finalValue
+
+          if (p.cond) {
+            const condVal = evaluatePinExpr(p.cond.expr, env)
+            item.cond = true
+            item.condOk = condVal === true || condVal === 'true' || (typeof condVal === 'number' && condVal !== 0)
+            item.condThen = p.cond.then
+            item.condElse = p.cond.else
+          } else {
+            item.display = fmtValue(finalValue, p.format ?? 'raw')
+          }
+        } catch (e) {
+          item.error = e instanceof Error ? e.message : String(e)
+        }
+      })
+      wave = []
+    }
+
     for (const p of ordered) {
       const item: PinItem = { label: p.label, annotation: p.annotation }
       try {
-        let raw: PinValue = ''
         if (p.fn) {
-          const fnDef = (abi as unknown as { name: string; inputs: { type: string }[] }[]).find(
-            (x) => x.name === p.fn
-          )
-          if (!fnDef) throw new Error(`ABI 中无函数 ${p.fn}`)
-          const args = (p.args ?? []).map((expr, i) => {
-            const v = evaluatePinExpr(expr, env)
-            return coerceArg(v, fnDef.inputs[i]?.type ?? 'string')
-          })
-          const data = await publicClient.readContract({
-            address,
-            abi: abi as never,
-            functionName: p.fn as never,
-            args: args as never,
-          })
-          raw = toEnvValue(data)
-        }
-
-        const finalValue = p.expr
-          ? evaluatePinExpr(p.expr, { ...env, v: raw })
-          : raw
-        env[p.label] = finalValue
-
-        if (p.cond) {
-          const condVal = evaluatePinExpr(p.cond.expr, env)
-          item.cond = true
-          item.condOk = condVal === true || condVal === 'true' || (typeof condVal === 'number' && condVal !== 0)
-          item.condThen = p.cond.then
-          item.condElse = p.cond.else
+          // 参数/表达式依赖尚未计算的值 → 先 flush 当前波（保证依赖顺序）
+          if (needsEnvFlush(p, env)) await flushWave()
+          wave.push({ p, item })
         } else {
-          item.display = fmtValue(finalValue, p.format ?? 'raw')
+          // 纯计算 pin（无 RPC）：若依赖未计算的值同样先 flush
+          if (needsEnvFlush(p, env)) await flushWave()
+          const finalValue = p.expr
+            ? evaluatePinExpr(p.expr, { ...env, v: '' })
+            : ''
+          env[p.label] = finalValue
+
+          if (p.cond) {
+            const condVal = evaluatePinExpr(p.cond.expr, env)
+            item.cond = true
+            item.condOk = condVal === true || condVal === 'true' || (typeof condVal === 'number' && condVal !== 0)
+            item.condThen = p.cond.then
+            item.condElse = p.cond.else
+          } else {
+            item.display = fmtValue(finalValue, p.format ?? 'raw')
+          }
         }
       } catch (e) {
         item.error = e instanceof Error ? e.message : String(e)
       }
       results.push(item)
     }
+    await flushWave()
     items.value = results
     updatedAt.value = new Date().toLocaleTimeString('zh-CN', { hour12: false })
   } finally {
