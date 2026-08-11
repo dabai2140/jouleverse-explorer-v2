@@ -56,17 +56,17 @@ export function useJNSVote() {
   }
 
   // 加载全部提案（并行读取，含状态派生）
+  // 注：不用 multicall——Jouleverse chain 未配置 multicall3，改用 Promise.all + readContract 并行读
   async function loadProposals() {
     isLoading.value = true
     loadError.value = null
     try {
       const block = await fetchCurrentBlock()
 
-      const [totalRaw] = await publicClient.multicall({
-        contracts: [
-          { address: JNSVOTE_ADDRESS, abi: jnsVoteABI, functionName: '_totalProposals' },
-        ],
-        allowFailure: false,
+      const totalRaw = await publicClient.readContract({
+        address: JNSVOTE_ADDRESS,
+        abi: jnsVoteABI,
+        functionName: '_totalProposals',
       })
 
       const total = Number(totalRaw)
@@ -77,7 +77,7 @@ export function useJNSVote() {
         return
       }
 
-      // 并行读取所有提案（v1 逐个串行，这里用 multicall 一次搞定）
+      // 并行读取所有提案（v1 逐个串行，这里 Promise.all 一次并发）
       const calls = Array.from({ length: total }, (_, i) => ({
         address: JNSVOTE_ADDRESS as `0x${string}`,
         abi: jnsVoteABI,
@@ -85,12 +85,12 @@ export function useJNSVote() {
         args: [BigInt(i + 1)] as const,
       }))
 
-      const results = await publicClient.multicall({ contracts: calls, allowFailure: true })
+      const settled = await Promise.allSettled(calls.map((c) => publicClient.readContract(c)))
 
       const list: JNSVoteProposal[] = []
-      results.forEach((res, idx) => {
+      settled.forEach((res, idx) => {
         const id = idx + 1
-        if (!res.result) {
+        if (res.status === 'rejected') {
           // 单条失败：仍占位，标记为异常（不阻塞整体）
           list.push({
             id,
@@ -111,7 +111,7 @@ export function useJNSVote() {
           })
           return
         }
-        const p = res.result
+        const p = res.value
         const timeBegin = p[2]
         const timeEnd = p[3]
         const countVotesFor = p[4]
@@ -161,13 +161,20 @@ export function useJNSVote() {
   // 资格检查：JTI 余额 > 0 且 JNS 余额 > 0
   async function checkEligibility(address: string) {
     try {
-      const [jtiCount, jnsCount] = await publicClient.multicall({
-        contracts: [
-          { address: JTI_ADDRESS, abi: jtiABI, functionName: 'balanceOf', args: [address as `0x${string}`] },
-          { address: JNS_ADDRESS, abi: jnsABI, functionName: 'balanceOf', args: [address as `0x${string}`] },
-        ],
-        allowFailure: false,
-      })
+      const [jtiCount, jnsCount] = await Promise.all([
+        publicClient.readContract({
+          address: JTI_ADDRESS,
+          abi: jtiABI,
+          functionName: 'balanceOf',
+          args: [address as `0x${string}`],
+        }),
+        publicClient.readContract({
+          address: JNS_ADDRESS,
+          abi: jnsABI,
+          functionName: 'balanceOf',
+          args: [address as `0x${string}`],
+        }),
+      ])
       eligibility.value = {
         hasJTI: jtiCount > 0n,
         hasJNS: jnsCount > 0n,
@@ -189,10 +196,10 @@ export function useJNSVote() {
       functionName: '_jti_voted' as const,
       args: [BigInt(id), address as `0x${string}`] as const,
     }))
-    const results = await publicClient.multicall({ contracts: calls, allowFailure: true })
+    const settled = await Promise.allSettled(calls.map((c) => publicClient.readContract(c)))
     const voted = new Set<number>()
-    results.forEach((res, idx) => {
-      if (res.result && (res.result as readonly unknown[])[0] !== 0n) {
+    settled.forEach((res, idx) => {
+      if (res.status === 'fulfilled' && (res.value as readonly unknown[])[0] !== 0n) {
         voted.add(proposalIds[idx])
       }
     })

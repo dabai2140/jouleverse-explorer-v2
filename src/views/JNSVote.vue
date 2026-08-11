@@ -201,15 +201,17 @@ function shortCid(link: string): string {
 }
 
 onMounted(async () => {
-  await walletStore.restoreConnection()
+  // 并行：钱包恢复 + 提案加载（不互相阻塞，避免无钱包时等 5s）
+  walletStore.restoreConnection().then(() => {
+    if (walletStore.address) {
+      checkEligibility(walletStore.address)
+      checkVoted(walletStore.address, proposals.value.map((p) => p.id))
+    }
+  })
   try {
     await loadProposals()
   } catch {
     rpcOk.value = false
-  }
-  if (walletStore.address) {
-    await checkEligibility(walletStore.address)
-    await checkVoted(walletStore.address, proposals.value.map((p) => p.id))
   }
 })
 </script>
