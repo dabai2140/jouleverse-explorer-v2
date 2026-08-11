@@ -2,6 +2,7 @@
 
 **文档日期**：2026-07-31  
 **维护人**：zhangxin / claude / 大白  
+**最近更新**：2026-08-11（大白：同步代码实际状态——性能项/代码质量项全部完成，Pages 正式部署已配置）  
 **用途**：跟踪 v1 → v2 功能迁移进度 + 新功能规划，作为后续开发的唯一入口文档  
 
 > v2 规划文档（`explorer-v2-mvp-plan.md` / `jouleverse-explorer-refactor-plan.md`，撰写于 2026-03-18）的"V1 功能清单"基于当时的 v1 快照，**遗漏了 v1 在 2026 年 1–3 月新增的功能**（Core ID、JVA/B32 地址）。本文档在此基础上补全，以 v1 当前线上版本（jscan.jnsdao.com）为权威基线。
@@ -155,16 +156,16 @@
   4. 超过 50 个提示"前往 JNS 页查看全部" ✅
 - **实现**：`AddressDetail.vue` JNS 持有面板（`JNS_BATCH_SIZE=10` / `JNS_MAX_DISPLAY=50`）
 
-### 🟡 中等性能问题
+### 🟡 中等性能问题（全部已解决 ✅）
 
-#### PERF-3：首页创世区块重复 fetch（`Home.vue:321`）
+#### ✅ PERF-3：首页创世区块重复 fetch（已修复，2026-08-11 确认）
 - **问题**：`fetchLatestBlocks` 每次调用都 `await publicClient.getBlock({ blockNumber: 0n })` 获取创世区块计算运行时间。创世区块内容永远不变，但每次刷新都多一次 RPC。
-- **解决方案**：将创世区块时间戳硬编码为常量（或 module 级单次缓存），省去该 RPC 调用。需确认 Jouleverse 创世区块时间戳。
+- **解决方案**：创世区块时间戳已硬编码为常量 `GENESIS_TIMESTAMP = 1664451960`（`Home.vue:222`），省去该 RPC 调用。
 
-#### PERF-4：首页区块串行加载（`Home.vue:344-356`）
+#### ✅ PERF-4：首页区块串行加载（已修复，2026-08-11 确认）
 - **问题**：`for (let i = 0; i < 10; i++) { await publicClient.getBlock(...) }` 串行获取 10 个区块。
-- **解决方案**：改为 `await Promise.all(Array.from({length:10}, (_,i) => publicClient.getBlock({blockNumber: latest - BigInt(i)})))`，并行加载，速度约提升 5-8 倍。
-- **关联**：已在代码质量表，提升为性能问题
+- **解决方案**：已改为 `await Promise.all(blockNumbers.map(n => publicClient.getBlock({ blockNumber: n })))`（`Home.vue:230`），并行加载。
+- **关联**：原列于代码质量表，已提升为性能问题并解决
 
 #### ✅ PERF-5：POP 历史加载无上限保护（已修复，2026-07-29）
 - **问题**：`loadMyPopHistory` 对地址持有的所有 POP Badge 一次性全量加载（`balanceOf` → 全量 `tokenOfOwnerByIndex` → 全量 `tokenURI`）。每月签到产生 1 个，3 年社区用户约 36 个，目前可接受；但若将来出现异常账号（自动化签到或合约 bug），无任何保护。
@@ -173,23 +174,23 @@
 
 ### 🟢 低优先级问题
 
-#### PERF-6：`jns.ts` 模块级 `console.log`（`jns.ts:152-156`）
+#### ✅ PERF-6：`jns.ts` 模块级 `console.log`（已修复，2026-08-11 确认）
 - **问题**：模块加载时直接 `console.log('=== jns.ts Module Load ===')` + `JNS_ADDRESS`，每次 import 都执行，生产环境会持续输出调试日志。
-- **解决方案**：直接删除这 5 行。不需要等功能开发，随时可清理。
+- **解决方案**：已删除，`contracts/*.ts` 无残留 console.log。
 
 ---
 
 ## 四、代码质量待处理项
 
-### 结构性问题
+### 结构性问题（全部已解决 ✅，2026-08-11 确认）
 
 | 优先级 | 问题 | 文件 | 说明 |
 |--------|------|------|------|
 | ✅ 已修复 | 地址交易历史根本缺陷（见 PERF-1 + P0-1） | `AddressDetail.vue` | getLogs 重构完成（2026-07-25） |
-| 🟡 中 | `formatAddress/formatHash/formatAge` 各文件重复 | 4个View文件 | 应抽 `src/utils/format.ts` 统一 |
-| 🟡 中 | `useBlockchain.ts` 死代码 | `src/composables/useBlockchain.ts` | `Home.vue` 从未 import，确认后删除 |
-| 🟡 中 | `Home.vue` 区块串行加载（见 PERF-4） | `Home.vue:344-356` | for 循环 getBlock x10，改 Promise.all |
-| 🟢 低 | `HelloWorld.vue` 脚手架残留 | `src/components/HelloWorld.vue` | 无引用，可删除 |
+| ✅ 已修复 | `formatAddress/formatHash/formatAge` 各文件重复 | 各 View | 已抽 `src/utils/format.ts` 统一，各 View 均从 utils 导入，无本地重复 |
+| ✅ 已修复 | `useBlockchain.ts` 死代码 | `src/composables/useBlockchain.ts` | 无引用，文件已删除 |
+| ✅ 已修复 | `Home.vue` 区块串行加载（见 PERF-4） | `Home.vue` | 已改 `Promise.all` 并行加载 |
+| ✅ 已修复 | `HelloWorld.vue` 脚手架残留 | `src/components/HelloWorld.vue` | 无引用，已删除 |
 
 ### 设计系统接入
 
@@ -239,7 +240,15 @@ src/design-system/
 
 中期 ───────────────────────────────────────────
   P3-1    JNSVote 治理投票（复杂，单独排期）— 🟡 进度展示已获 pin 面板基础（PR#12），主体未启动
-  代码质量：format.ts 统一、useBlockchain 清理、HelloWorld 删除
+
+2026-08-11 已清理（代码质量/性能收尾）────────
+  ✅ format.ts 统一（utils/format.ts）
+  ✅ useBlockchain.ts 死代码删除
+  ✅ HelloWorld.vue 脚手架删除
+  ✅ PERF-3 创世区块硬编码（GENESIS_TIMESTAMP）
+  ✅ PERF-4 Home.vue 区块并行加载
+  ✅ PERF-6 jns.ts console.log 清理
+  ✅ GitHub Pages 正式部署配置（hmisty 仓库）
 
 待定 ───────────────────────────────────────────
   P4 废弃功能（维持现状，不主动实现）
@@ -266,8 +275,8 @@ src/design-system/
 | 部署目标 | 地址 | 状态 |
 |---------|------|------|
 | GitHub Pages（fork） | `https://xiaopiao009.github.io/jouleverse-explorer-v2/` | ✅ 运行中 |
-| 上游合并后正式部署 | `hmisty/jouleverse-explorer-v2` 的 Pages | 等大白配置 GitHub Pages Source |
+| GitHub Pages（上游正式） | `https://hmisty.github.io/jouleverse-explorer-v2/` | ✅ 已配置（2026-08-11，source: explorer-v2 分支，已 built） |
 
 ---
 
-*最后更新：2026-06-25*
+*最后更新：2026-08-11（大白 💎）*
