@@ -196,13 +196,17 @@ const timelockEcoStats = computed(() => timelockEco.value ? ({
 
 const fetchTimelockData = async (address: string) => {
   try {
-    const [monthlyBudget, monthlyBlocks, used, released, available] = await Promise.all([
-      publicClient.readContract({ address: address as `0x${string}`, abi: timelockABI, functionName: 'MONTHLY_BUDGET' }),
-      publicClient.readContract({ address: address as `0x${string}`, abi: timelockABI, functionName: 'MONTHLY_BLOCKS' }),
-      publicClient.readContract({ address: address as `0x${string}`, abi: timelockABI, functionName: 'used' }),
-      publicClient.readContract({ address: address as `0x${string}`, abi: timelockABI, functionName: 'released' }),
-      publicClient.readContract({ address: address as `0x${string}`, abi: timelockABI, functionName: 'available' }),
-    ])
+    // multicall 聚合：5 次 RPC → 1 次（multicall3 2026-08-11 自部署）
+    const [monthlyBudget, monthlyBlocks, used, released, available] = await publicClient.multicall({
+      contracts: [
+        { address: address as `0x${string}`, abi: timelockABI, functionName: 'MONTHLY_BUDGET' },
+        { address: address as `0x${string}`, abi: timelockABI, functionName: 'MONTHLY_BLOCKS' },
+        { address: address as `0x${string}`, abi: timelockABI, functionName: 'used' },
+        { address: address as `0x${string}`, abi: timelockABI, functionName: 'released' },
+        { address: address as `0x${string}`, abi: timelockABI, functionName: 'available' },
+      ],
+      allowFailure: false,
+    })
     return { monthlyBudget, monthlyBlocks, used, released, available } as TimelockData
   } catch { return null }
 }
