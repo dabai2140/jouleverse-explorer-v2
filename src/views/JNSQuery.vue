@@ -284,6 +284,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { createPublicClient, http } from 'viem'
 import { JNS_ADDRESS, jnsABI } from '@/contracts/jns'
+import { fetchJnsHoldingBatch } from '@/utils/jns-holdings'
 import { jouleverseChain } from '@/config/chain'
 import { useWalletStore } from '@/stores/wallet'
 import { detectAddressFormat, decodeJVA } from '@/utils/jvaddress'
@@ -563,12 +564,15 @@ const searchDomain = async (domainName?: string) => {
 const loadOwnerJnsHoldings = async (ownerAddr: string) => {
   loadingOwnerJns.value = true
   try {
-    const total = await publicClient.readContract({
-      address: JNS_ADDRESS, abi: jnsABI, functionName: 'balanceOf', args: [ownerAddr as `0x${string}`],
-    }) as bigint
-    ownerJnsTotal.value = Number(total)
-    if (ownerJnsTotal.value <= 1) return // 只有当前域名,不显示
-    await loadOwnerJnsBatch(ownerAddr, OWNER_JNS_BATCH)
+    // multicall 聚合：balanceOf + 首批 tokenOfOwnerByIndex + _allTokensName → 2 次 RPC
+    const { balance, tokenIds, names } = await fetchJnsHoldingBatch(ownerAddr, 0, OWNER_JNS_BATCH, true)
+    const total = Number(balance ?? 0n)
+    ownerJnsTotal.value = total
+    if (total <= 1) return // 只有当前域名,不显示
+    for (let i = 0; i < names.length; i++) {
+      ownerJnsNames.value.push({ name: names[i], tokenId: Number(tokenIds[i]) })
+    }
+    ownerJnsLoaded.value = names.length
   } catch { /* 加载失败静默处理 */ }
   finally { loadingOwnerJns.value = false }
 }
@@ -579,20 +583,7 @@ const loadOwnerJnsBatch = async (ownerAddr: string, count: number) => {
   const end = Math.min(start + count, Math.min(ownerJnsTotal.value, OWNER_JNS_MAX))
   if (start >= end) return
 
-  const tokenIds = await Promise.all(
-    Array.from({ length: end - start }, (_, i) => BigInt(start + i)).map(idx =>
-      publicClient.readContract({
-        address: JNS_ADDRESS, abi: jnsABI, functionName: 'tokenOfOwnerByIndex', args: [ownerAddr as `0x${string}`, idx],
-      }) as Promise<bigint>
-    )
-  )
-  const names = await Promise.all(
-    tokenIds.map(id =>
-      publicClient.readContract({
-        address: JNS_ADDRESS, abi: jnsABI, functionName: '_allTokensName', args: [id],
-      }) as Promise<string>
-    )
-  )
+  const { tokenIds, names } = await fetchJnsHoldingBatch(ownerAddr, start, end - start, false)
   for (let i = 0; i < names.length; i++) {
     ownerJnsNames.value.push({ name: names[i], tokenId: Number(tokenIds[i]) })
   }

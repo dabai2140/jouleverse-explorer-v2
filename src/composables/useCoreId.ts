@@ -23,34 +23,32 @@ export function useCoreId(address: string) {
 
   // 我的Core ID：port自 v1 getAllJVCore（addressInfoController.js 第808-843行）
   const loadMyCoreIds = async () => {
-    const balance = await publicClient.readContract({
-      address: JVCORE_ADDRESS,
-      abi: jvcoreABI,
-      functionName: 'balanceOf',
-      args: [addr as `0x${string}`],
+    // multicall 聚合：balanceOf + tokenOfOwnerByIndex×10（越界自动过滤）→ 1 次
+    // 注：Core ID 每人一般 0-1 个，上限 10 覆盖极端情况
+    const aResults = await publicClient.multicall({
+      contracts: [
+        { address: JVCORE_ADDRESS, abi: jvcoreABI, functionName: 'balanceOf', args: [addr as `0x${string}`] },
+        ...Array.from({ length: 10 }, (_, i) => ({
+          address: JVCORE_ADDRESS, abi: jvcoreABI, functionName: 'tokenOfOwnerByIndex', args: [addr as `0x${string}`, BigInt(i)],
+        })),
+      ],
+      allowFailure: true,
     })
 
-    const indices = Array.from({ length: Number(balance) }, (_, i) => BigInt(i))
-    const tokenIds = (await Promise.all(
-      indices.map(i =>
-        publicClient.readContract({
-          address: JVCORE_ADDRESS,
-          abi: jvcoreABI,
-          functionName: 'tokenOfOwnerByIndex',
-          args: [addr as `0x${string}`, i],
-        }).catch(() => null)
-      )
-    )).filter((id): id is bigint => id !== null)
+    const tokenIds = aResults
+      .slice(1)
+      .filter((r) => r.status === 'success')
+      .map((r) => r.result as bigint)
 
-    const tokenURIs = await Promise.all(
-      tokenIds.map(tokenId =>
-        publicClient.readContract({
-          address: JVCORE_ADDRESS,
-          abi: jvcoreABI,
-          functionName: 'tokenURI',
-          args: [tokenId],
-        }).catch(() => null)
-      )
+    // multicall：tokenURI × N → 1 次
+    const bResults = await publicClient.multicall({
+      contracts: tokenIds.map((tokenId) => ({
+        address: JVCORE_ADDRESS, abi: jvcoreABI, functionName: 'tokenURI', args: [tokenId],
+      })),
+      allowFailure: true,
+    })
+    const tokenURIs: (string | null)[] = bResults.map((r) =>
+      (r.status === 'success' ? (r.result as unknown as string) : null)
     )
 
     coreIds.value = tokenIds.map((tokenId, i) => ({
@@ -78,26 +76,27 @@ export function useCoreId(address: string) {
     // 超上限时从高位取最近 MAX_POP_DISPLAY 条
     const startIndex = popHistoryTruncated.value ? total - MAX_POP_DISPLAY : 0
     const indices = Array.from({ length: total - startIndex }, (_, i) => BigInt(startIndex + i))
-    const tokenIds = (await Promise.all(
-      indices.map(i =>
-        publicClient.readContract({
-          address: POPBADGE_ADDRESS,
-          abi: popbadgeABI,
-          functionName: 'tokenOfOwnerByIndex',
-          args: [addr as `0x${string}`, i],
-        }).catch(() => null)
-      )
-    )).filter((id): id is bigint => id !== null)
 
-    const tokenURIs = await Promise.all(
-      tokenIds.map(tokenId =>
-        publicClient.readContract({
-          address: POPBADGE_ADDRESS,
-          abi: popbadgeABI,
-          functionName: 'tokenURI',
-          args: [tokenId],
-        }).catch(() => null)
-      )
+    // multicall 步骤A：tokenOfOwnerByIndex × N → 1 次
+    const aResults = await publicClient.multicall({
+      contracts: indices.map((i) => ({
+        address: POPBADGE_ADDRESS, abi: popbadgeABI, functionName: 'tokenOfOwnerByIndex', args: [addr as `0x${string}`, i],
+      })),
+      allowFailure: true,
+    })
+    const tokenIds = aResults
+      .filter((r) => r.status === 'success')
+      .map((r) => r.result as bigint)
+
+    // multicall 步骤B：tokenURI × N → 1 次
+    const bResults = await publicClient.multicall({
+      contracts: tokenIds.map((tokenId) => ({
+        address: POPBADGE_ADDRESS, abi: popbadgeABI, functionName: 'tokenURI', args: [tokenId],
+      })),
+      allowFailure: true,
+    })
+    const tokenURIs: (string | null)[] = bResults.map((r) =>
+      (r.status === 'success' ? (r.result as unknown as string) : null)
     )
 
     const result: PopHistoryEntry[] = tokenIds.map((tokenId, i) => {

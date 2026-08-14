@@ -113,29 +113,36 @@ export function useCheckinStats() {
     const size = actualEnd - actualStart + 1
     const indices = Array.from({ length: size }, (_, i) => actualStart + i)
 
-    // 第一步：并行取 tokenId
-    const tokenIds = await Promise.all(
-      indices.map(i =>
-        publicClient.readContract({
-          address: POPBADGE_ADDRESS,
-          abi: popbadgeABI,
-          functionName: 'tokenByIndex',
-          args: [BigInt(i)],
-        })
-      )
-    )
+    // 第一步：multicall 并行取 tokenId → 1 次 RPC
+    const aResults = await publicClient.multicall({
+      contracts: indices.map((i) => ({
+        address: POPBADGE_ADDRESS,
+        abi: popbadgeABI,
+        functionName: 'tokenByIndex',
+        args: [BigInt(i)],
+      })),
+      allowFailure: false,
+    })
+    const tokenIds = aResults as bigint[]
 
-    // 第二步：并行取 POPInfo，单个失败记录到 failedTokenIds 不影响整批
-    const popInfos = await Promise.all(
-      tokenIds.map(tokenId =>
-        publicClient.readContract({
-          address: POPBADGE_ADDRESS,
-          abi: popbadgeABI,
-          functionName: 'getPOPInfo',
-          args: [tokenId],
-        }).catch(() => { failedTokenIds.add(tokenId); return null })
-      )
-    )
+    // 第二步：multicall 并行取 POPInfo，单个失败记录到 failedTokenIds 不影响整批 → 1 次 RPC
+    const bResults = await publicClient.multicall({
+      contracts: tokenIds.map((tokenId) => ({
+        address: POPBADGE_ADDRESS,
+        abi: popbadgeABI,
+        functionName: 'getPOPInfo',
+        args: [tokenId],
+      })),
+      allowFailure: true,
+    })
+    const popInfos: (readonly [bigint, bigint, bigint] | null)[] = bResults.map((r) => {
+      if (r.status === 'failure') {
+        const tokenId = tokenIds[bResults.indexOf(r)]
+        failedTokenIds.add(tokenId)
+        return null
+      }
+      return r.result as unknown as readonly [bigint, bigint, bigint]
+    })
 
     const results: TokenData[] = []
     for (let i = 0; i < tokenIds.length; i++) {
@@ -174,15 +181,22 @@ export function useCheckinStats() {
       const toRetry = [...failedTokenIds]
       failedTokenIds.clear()
 
-      const popInfos = await Promise.all(
-        toRetry.map(tokenId =>
-          publicClient.readContract({
-            address: POPBADGE_ADDRESS,
-            abi: popbadgeABI,
-            functionName: 'getPOPInfo',
-            args: [tokenId],
-          }).catch(() => { failedTokenIds.add(tokenId); return null })
-        )
+      const popInfos: (readonly [bigint, bigint, bigint] | null)[] = await publicClient.multicall({
+        contracts: toRetry.map((tokenId) => ({
+          address: POPBADGE_ADDRESS,
+          abi: popbadgeABI,
+          functionName: 'getPOPInfo',
+          args: [tokenId],
+        })),
+        allowFailure: true,
+      }).then((results) =>
+        results.map((r) => {
+          if (r.status === 'failure') {
+            failedTokenIds.add(toRetry[results.indexOf(r)])
+            return null
+          }
+          return r.result as unknown as readonly [bigint, bigint, bigint]
+        })
       )
 
       if (gen !== loadingGeneration) return

@@ -1,0 +1,308 @@
+<template>
+  <div class="jnsvote-view">
+    <div class="back-row">
+      <router-link to="/tools" class="back-link">← 返回工具集</router-link>
+    </div>
+
+    <div class="jnsvote-header">
+      <h1>🗳️ JNSVote 治理投票</h1>
+      <p>参与 JNSDAO 治理投票 · 投票资格：持有 JTI 认证 + JNS 域名</p>
+      <div class="header-meta">
+        <n-tag
+          size="small"
+          :type="rpcOk ? 'success' : 'error'"
+          round
+        >
+          {{ rpcOk ? '✅ 已连接 Jouleverse' : '❌ RPC 异常' }}
+        </n-tag>
+        <n-tag v-if="totalProposals > 0" size="small" type="info" round>
+          提案总数：{{ totalProposals }}
+        </n-tag>
+        <n-tag v-if="currentBlock > 0n" size="small" round>
+          当前区块：{{ currentBlock.toString() }}
+        </n-tag>
+      </div>
+    </div>
+
+    <!-- 钱包区 -->
+    <div v-if="!walletStore.isConnected" class="wallet-connect-box">
+      <n-button type="primary" :loading="walletStore.isConnecting" @click="handleConnect">
+        🔗 连接钱包（查看投票资格）
+      </n-button>
+    </div>
+    <div v-else class="wallet-info-box">
+      <span class="wallet-label">当前账户：</span>
+      <JvHashText :value="walletStore.address || ''" type="address" />
+      <n-button size="tiny" quaternary @click="walletStore.disconnect()">断开</n-button>
+    </div>
+
+    <!-- 资格卡片（已连接） -->
+    <div v-if="walletStore.isConnected && eligibility" class="eligibility-box">
+      <div class="eligibility-item" :class="eligibility.hasJTI ? 'ok' : 'no'">
+        {{ eligibility.hasJTI ? '✅' : '❌' }} JTI 认证
+        <span v-if="eligibility.hasJTI" class="eligibility-count">({{ eligibility.jtiCount.toString() }})</span>
+      </div>
+      <div class="eligibility-item" :class="eligibility.hasJNS ? 'ok' : 'no'">
+        {{ eligibility.hasJNS ? '✅' : '❌' }} JNS 持仓 > 0
+        <span v-if="eligibility.hasJNS" class="eligibility-count">({{ eligibility.jnsCount.toString() }} 个)</span>
+      </div>
+    </div>
+
+    <!-- 加载 / 异常 / 空态 -->
+    <div v-if="isLoading" class="loading-wrap">
+      <JvLoading text="正在读取链上提案..." />
+    </div>
+    <div v-else-if="loadError" class="error-wrap">
+      <JvPageState type="network-error" title="加载失败" :description="loadError">
+        <n-button size="small" @click="refresh">重试</n-button>
+      </JvPageState>
+    </div>
+    <div v-else-if="proposals.length === 0" class="empty-wrap">
+      <JvPageState type="empty" title="暂无提案" description="链上还没有创建任何治理提案" />
+    </div>
+
+    <!-- 提案列表 -->
+    <div v-else class="proposal-list">
+      <div
+        v-for="p in proposals"
+        :key="p.id"
+        class="proposal-card"
+        :class="[`status-${p.status}`, { 'is-disabled': p.disabled }]"
+      >
+        <div class="proposal-head">
+          <div class="proposal-title-row">
+            <span class="proposal-id">#{{ p.id }}</span>
+            <span class="proposal-title">{{ p.title }}</span>
+            <JvStatusTag
+              :status="p.disabled ? 'default' : p.status === 'pending' ? 'info' : p.status === 'active' ? 'success' : 'default'"
+              :label="p.disabled ? '已停用' : p.status === 'pending' ? '未开始' : p.status === 'active' ? '进行中' : '已结束'"
+            />
+            <JvStatusTag
+              v-if="votedProposals.has(p.id)"
+              status="tx-success"
+              label="已投票"
+            />
+          </div>
+          <a
+            v-if="p.link"
+            :href="p.link"
+            target="_blank"
+            rel="noopener"
+            class="proposal-link"
+          >🔗 {{ shortCid(p.link) }}</a>
+        </div>
+
+        <div class="proposal-body">
+          <!-- 时间信息 -->
+          <div class="time-row">
+            <span>开始区块：{{ p.timeBegin.toString() }}</span>
+            <span>结束区块：{{ p.timeEnd.toString() }}</span>
+            <span v-if="p.status === 'pending'" class="countdown">
+              距开始约 {{ formatCountdown(p.timeBegin - currentBlock) }}
+            </span>
+            <span v-else-if="p.status === 'active'" class="countdown">
+              距结束约 {{ formatCountdown(p.timeEnd - currentBlock) }}
+            </span>
+          </div>
+
+          <!-- 票数统计 -->
+          <div class="stats-row">
+            <div class="stat">
+              <div class="stat-label">赞成票数</div>
+              <div class="stat-value">{{ p.countVotesFor.toString() }} <span v-if="p.ar !== null" class="stat-pct">({{ p.ar }}%)</span></div>
+            </div>
+            <div class="stat">
+              <div class="stat-label">反对票数</div>
+              <div class="stat-value">{{ p.countVotesAgainst.toString() }} <span v-if="p.ar !== null" class="stat-pct">{{ (100 - p.ar).toFixed(2) }}%</span></div>
+            </div>
+            <div class="stat">
+              <div class="stat-label">代表 JNS 持仓</div>
+              <div class="stat-value">{{ p.countJNSvoted.toString() }} <span v-if="p.rr !== null" class="stat-pct">({{ p.rr }}%)</span></div>
+            </div>
+            <div class="stat">
+              <div class="stat-label">其中赞成代表持仓</div>
+              <div class="stat-value">{{ p.countJNSvotedFor.toString() }}</div>
+            </div>
+            <div class="stat">
+              <div class="stat-label">JNS 总量（快照）</div>
+              <div class="stat-value">{{ p.totalJNS.toString() }}</div>
+            </div>
+          </div>
+
+          <!-- 支持率进度条 -->
+          <div class="progress-row">
+            <span class="progress-label">支持率</span>
+            <n-progress
+              class="progress-bar"
+              type="line"
+              :percentage="p.ar ?? 0"
+              :color="(p.ar ?? 0) >= 66.67 ? '#18a058' : '#d03050'"
+              :height="10"
+              :show-indicator="false"
+            />
+            <span class="progress-pct">{{ p.ar !== null ? p.ar + '%' : '—' }}</span>
+          </div>
+
+          <!-- 结果判定 -->
+          <div v-if="p.status === 'ended' && !p.disabled && p.decision !== 0" class="decision-row">
+            <span class="decision" :class="p.decision === 1 ? 'pass' : 'fail'">
+              {{ p.decision === 1 ? '✅ 通过' : '❌ 未通过' }}
+            </span>
+            <span class="decision-rule">({{ p.id <= 2 ? 'V1 规则' : 'V2 规则' }}：支持率&gt;2/3 {{ p.id <= 2 ? '且代表率&gt;1/2' : '且代表率&gt;0.4' }})</span>
+          </div>
+
+          <!-- 投票操作（I2 迭代启用） -->
+          <div v-if="p.status === 'active' && !p.disabled" class="vote-row">
+            <n-tag size="small" type="warning" round>投票功能将在下一迭代开放</n-tag>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { onMounted, ref } from 'vue'
+import { useWalletStore } from '../stores/wallet'
+import { useJNSVote } from '../composables/useJNSVote'
+import { JvLoading, JvPageState, JvHashText, JvStatusTag } from '../design-system'
+
+const walletStore = useWalletStore()
+const { proposals, totalProposals, currentBlock, isLoading, loadError, eligibility, votedProposals, loadProposals, checkEligibility, checkVoted, formatCountdown } = useJNSVote()
+
+const rpcOk = ref(true)
+
+async function refresh() {
+  rpcOk.value = true
+  await loadProposals()
+  if (walletStore.address) {
+    await checkEligibility(walletStore.address)
+    await checkVoted(walletStore.address, proposals.value.map((p) => p.id))
+  }
+}
+
+async function handleConnect() {
+  try {
+    await walletStore.connect()
+    if (walletStore.address) {
+      await checkEligibility(walletStore.address)
+      await checkVoted(walletStore.address, proposals.value.map((p) => p.id))
+    }
+  } catch {
+    // 用户取消或失败，保持现状
+  }
+}
+
+// 简化 CID 展示
+function shortCid(link: string): string {
+  if (!link) return ''
+  const clean = link.startsWith('ipfs://') ? link.slice(7) : link
+  return clean.length > 40 ? clean.slice(0, 20) + '…' + clean.slice(-16) : clean
+}
+
+onMounted(async () => {
+  // 并行：钱包恢复 + 提案加载（不互相阻塞，避免无钱包时等 5s）
+  walletStore.restoreConnection().then(() => {
+    if (walletStore.address) {
+      checkEligibility(walletStore.address)
+      checkVoted(walletStore.address, proposals.value.map((p) => p.id))
+    }
+  })
+  try {
+    await loadProposals()
+  } catch {
+    rpcOk.value = false
+  }
+})
+</script>
+
+<style scoped>
+.jnsvote-view {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 20px 16px 48px;
+}
+.back-row { margin-bottom: 12px; }
+.back-link { color: var(--jv-text-secondary, #888); font-size: 13px; text-decoration: none; }
+.back-link:hover { color: var(--jv-primary, #18a058); }
+
+.jnsvote-header h1 { margin: 0 0 4px; font-size: 24px; }
+.jnsvote-header p { margin: 0 0 12px; color: var(--jv-text-secondary, #888); font-size: 13px; }
+.header-meta { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.wallet-connect-box, .wallet-info-box {
+  margin: 16px 0;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: var(--jv-surface-2, #f7f7f7);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+.wallet-label { color: var(--jv-text-secondary, #888); }
+
+.eligibility-box {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 0 0 16px;
+}
+.eligibility-item {
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 14px;
+  border: 1px solid transparent;
+}
+.eligibility-item.ok { background: rgba(24, 160, 88, 0.1); color: #18a058; border-color: rgba(24, 160, 88, 0.3); }
+.eligibility-item.no { background: rgba(208, 48, 80, 0.08); color: #d03050; border-color: rgba(208, 48, 80, 0.25); }
+.eligibility-count { opacity: 0.7; font-size: 12px; }
+
+.loading-wrap, .error-wrap, .empty-wrap { margin: 40px 0; }
+
+.proposal-list { display: flex; flex-direction: column; gap: 14px; }
+.proposal-card {
+  border: 1px solid var(--jv-border, #e5e5e5);
+  border-radius: 12px;
+  padding: 16px 18px;
+  background: var(--jv-surface, #fff);
+}
+.proposal-card.is-disabled { opacity: 0.55; }
+
+.proposal-head { margin-bottom: 12px; }
+.proposal-title-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.proposal-id { font-weight: 700; color: var(--jv-primary, #18a058); font-size: 15px; }
+.proposal-title { font-size: 15px; font-weight: 600; }
+.proposal-link { display: inline-block; margin-top: 6px; font-size: 12px; color: var(--jv-text-secondary, #888); word-break: break-all; }
+
+.proposal-body { display: flex; flex-direction: column; gap: 10px; }
+.time-row { display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; color: var(--jv-text-secondary, #888); }
+.countdown { color: var(--jv-primary, #18a058); }
+
+.stats-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+}
+.stat {
+  background: var(--jv-surface-2, #f7f7f7);
+  border-radius: 8px;
+  padding: 8px 12px;
+}
+.stat-label { font-size: 12px; color: var(--jv-text-secondary, #888); }
+.stat-value { font-size: 14px; font-weight: 600; margin-top: 2px; }
+.stat-pct { font-size: 12px; font-weight: 400; color: var(--jv-text-secondary, #888); }
+
+.progress-row { display: flex; align-items: center; gap: 10px; }
+.progress-label { font-size: 13px; color: var(--jv-text-secondary, #888); white-space: nowrap; }
+.progress-bar { flex: 1; }
+.progress-pct { font-size: 13px; font-weight: 600; min-width: 44px; text-align: right; }
+
+.decision-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.decision { font-size: 14px; font-weight: 700; }
+.decision.pass { color: #18a058; }
+.decision.fail { color: #d03050; }
+.decision-rule { font-size: 12px; color: var(--jv-text-secondary, #888); }
+
+.vote-row { padding-top: 4px; }
+</style>

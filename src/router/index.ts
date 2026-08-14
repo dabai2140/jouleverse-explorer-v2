@@ -9,6 +9,7 @@ import CoreCheckinStats from '../views/CoreCheckinStats.vue'
 import ToolsHome from '../views/ToolsHome.vue'
 import ContractToolView from '../views/ContractToolView.vue'
 import MerkleProofGenerator from '../views/MerkleProofGenerator.vue'
+import JNSVote from '../views/JNSVote.vue'
 
 const routes = [
   {
@@ -36,6 +37,11 @@ const routes = [
     path: '/tools/merkle',
     name: 'merkleProofGenerator',
     component: MerkleProofGenerator
+  },
+  {
+    path: '/jnsvote',
+    name: 'jnsvote',
+    component: JNSVote
   },
   {
     path: '/blocks',

@@ -124,10 +124,14 @@ const formatDuration = (seconds: number | bigint): string => {
 
 const loadCheckInParams = async () => {
   try {
-    const [interval, expire] = await Promise.all([
-      publicClient.readContract({ address: JVCORE_ADDRESS, abi: jvcoreABI, functionName: 'minCheckInInterval' }),
-      publicClient.readContract({ address: JVCORE_ADDRESS, abi: jvcoreABI, functionName: 'expireDuration' }),
-    ])
+    // multicall 聚合：2 次 RPC → 1 次
+    const [interval, expire] = await publicClient.multicall({
+      contracts: [
+        { address: JVCORE_ADDRESS, abi: jvcoreABI, functionName: 'minCheckInInterval' },
+        { address: JVCORE_ADDRESS, abi: jvcoreABI, functionName: 'expireDuration' },
+      ],
+      allowFailure: false,
+    })
     minCheckInInterval.value = interval
     expireDuration.value = expire
   } catch (err) {
