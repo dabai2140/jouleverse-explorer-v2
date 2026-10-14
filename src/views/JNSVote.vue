@@ -151,9 +151,40 @@
             <span class="decision-rule">({{ p.id <= 2 ? 'V1 规则' : 'V2 规则' }}：支持率&gt;2/3 {{ p.id <= 2 ? '且代表率&gt;1/2' : '且代表率&gt;0.4' }})</span>
           </div>
 
-          <!-- 投票操作（I2 迭代启用） -->
+          <!-- 投票操作 -->
           <div v-if="p.status === 'active' && !p.disabled" class="vote-row">
-            <n-tag size="small" type="warning" round>投票功能将在下一迭代开放</n-tag>
+            <template v-if="!walletStore.isConnected">
+              <span class="vote-connect-hint">🔗 连接钱包后可投票</span>
+            </template>
+            <template v-else-if="!votedProposals.has(p.id)">
+              <JvActionButton
+                type="success"
+                size="small"
+                :loading="voteState(p.id).loading && voteState(p.id).direction === 'for'"
+                :disabled="voteState(p.id).loading || !isEligible"
+                @click="handleVote(p, true)"
+              >
+                投赞成票
+              </JvActionButton>
+              <JvActionButton
+                type="error"
+                size="small"
+                :loading="voteState(p.id).loading && voteState(p.id).direction === 'against'"
+                :disabled="voteState(p.id).loading || !isEligible"
+                @click="handleVote(p, false)"
+              >
+                投反对票
+              </JvActionButton>
+              <span v-if="!isEligible && eligibilityLoaded" class="vote-connect-hint">无投票资格（需 JTI + JNS 持仓）</span>
+            </template>
+            <JvStatusTag v-else status="tx-success" label="已投票" />
+            <JvHashText
+              v-if="voteState(p.id).txHash"
+              :value="voteState(p.id).txHash ?? ''"
+              type="tx"
+              :truncate="10"
+            />
+            <p v-if="voteState(p.id).error" class="vote-error">{{ voteState(p.id).error }}</p>
           </div>
         </div>
       </div>
@@ -162,19 +193,30 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
-import { useWalletStore } from '../stores/wallet'
-import { useJNSVote } from '../composables/useJNSVote'
-import { JvLoading, JvPageState, JvHashText, JvStatusTag } from '../design-system'
+import { onMounted, onUnmounted, reactive, ref, computed } from 'vue'
+import { useWalletStore, config as wagmiConfig } from '../stores/wallet'
+import { watchAccount } from '@wagmi/core'
+import { useJNSVote, mapVoteError, SwitchChainError } from '../composables/useJNSVote'
+import type { JNSVoteProposal } from '../composables/useJNSVote'
+import { JvLoading, JvPageState, JvHashText, JvStatusTag, JvActionButton } from '../design-system'
 
 const walletStore = useWalletStore()
-const { proposals, totalProposals, currentBlock, isLoading, loadError, eligibility, votedProposals, loadProposals, checkEligibility, checkVoted, formatCountdown } = useJNSVote()
+const { proposals, totalProposals, currentBlock, isLoading, loadError, eligibility, votedProposals, loadProposals, checkEligibility, checkVoted, vote, formatCountdown } = useJNSVote()
 
 const rpcOk = ref(true)
 
+// 是否具备投票资格（已连接且持有 JTI + JNS）
+const isEligible = computed(() => eligibility.value?.hasJTI === true && eligibility.value?.hasJNS === true)
+// 资格是否已加载完成（eligibility 为 null 表示仍在异步加载中）
+const eligibilityLoaded = computed(() => eligibility.value !== null)
+
+// 账户切换监听注销函数（在 setup 顶层同步注册，避免 await 后 currentInstance 失效）
+let unwatchAccount: (() => void) | undefined
+onUnmounted(() => unwatchAccount?.())
+
 async function refresh() {
-  rpcOk.value = true
   await loadProposals()
+  rpcOk.value = loadError.value === null
   if (walletStore.address) {
     await checkEligibility(walletStore.address)
     await checkVoted(walletStore.address, proposals.value.map((p) => p.id))
@@ -200,19 +242,82 @@ function shortCid(link: string): string {
   return clean.length > 40 ? clean.slice(0, 20) + '…' + clean.slice(-16) : clean
 }
 
-onMounted(async () => {
-  // 并行：钱包恢复 + 提案加载（不互相阻塞，避免无钱包时等 5s）
-  walletStore.restoreConnection().then(() => {
-    if (walletStore.address) {
-      checkEligibility(walletStore.address)
-      checkVoted(walletStore.address, proposals.value.map((p) => p.id))
-    }
-  })
-  try {
-    await loadProposals()
-  } catch {
-    rpcOk.value = false
+// ── 投票状态（按提案 id 隔离，避免一个 loading 挡住全部提案）──
+interface VoteState {
+  loading: boolean
+  direction: 'for' | 'against' | null
+  txHash: string | null
+  error: string | null
+}
+
+const voteStates = reactive(new Map<number, VoteState>())
+
+function voteState(id: number): VoteState {
+  let state = voteStates.get(id)
+  if (!state) {
+    state = reactive({ loading: false, direction: null, txHash: null, error: null })
+    voteStates.set(id, state)
   }
+  return state
+}
+
+async function handleVote(proposal: JNSVoteProposal, isFor: boolean) {
+  if (!walletStore.address) return
+  const state = voteState(proposal.id)
+  state.loading = true
+  state.direction = isFor ? 'for' : 'against'
+  state.error = null
+  state.txHash = null
+  try {
+    const hash = await vote(proposal.id, isFor)
+    state.txHash = hash
+    // 投票成功：静默刷新票数与已投票状态（不触发全屏 loading）
+    await loadProposals({ silent: true })
+    if (walletStore.address) {
+      await checkVoted(walletStore.address, proposals.value.map((p) => p.id))
+    }
+  } catch (error) {
+    state.error = error instanceof SwitchChainError
+      ? '请先在钱包中手动切换到 Jouleverse 网络（Chain ID: 3666，RPC: https://rpc.jnsdao.com:8503）'
+      : mapVoteError(error)
+  } finally {
+    state.loading = false
+    state.direction = null
+  }
+}
+
+onMounted(async () => {
+  // 提案加载先启动，用变量持有 promise；钱包恢复回调与账户切换监听均等待它，
+  // 避免「钱包恢复早于提案加载」时 checkVoted 拿到空提案列表的竞态
+  const loadPromise = loadProposals()
+
+  // 钱包恢复 + 资格/已投检查（等待提案加载完成后执行）
+  walletStore.restoreConnection().then(async () => {
+    if (!walletStore.address) return
+    await loadPromise
+    await checkEligibility(walletStore.address)
+    await checkVoted(walletStore.address, proposals.value.map((p) => p.id))
+  })
+
+  // 账户切换监听：MetaMask 切换账户后刷新资格与已投状态（合约会兜底拦截，仅体验优化）
+  unwatchAccount = watchAccount(wagmiConfig, {
+    async onChange(connection) {
+      const addr = connection.address
+      if (addr) {
+        await loadPromise
+        checkEligibility(addr)
+        checkVoted(addr, proposals.value.map((p) => p.id))
+      } else {
+        // 断开连接：清空资格与已投状态
+        eligibility.value = null
+        votedProposals.value = new Set()
+      }
+    },
+  })
+
+  // 等待首次加载完成，联动 RPC 连接状态显示（loadProposals 内部已吞错，需用 loadError 判断）
+  await loadPromise
+  rpcOk.value = loadError.value === null
 })
 </script>
 
@@ -304,5 +409,23 @@ onMounted(async () => {
 .decision.fail { color: #d03050; }
 .decision-rule { font-size: 12px; color: var(--jv-text-secondary, #888); }
 
-.vote-row { padding-top: 4px; }
+.vote-row {
+  padding-top: 4px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.vote-error {
+  color: var(--jv-error);
+  font-size: 12px;
+  margin: 0;
+  flex-basis: 100%;
+}
+
+.vote-connect-hint {
+  color: var(--jv-text-secondary, #888);
+  font-size: 13px;
+}
 </style>

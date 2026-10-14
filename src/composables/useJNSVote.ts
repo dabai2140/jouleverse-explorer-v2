@@ -2,12 +2,47 @@
 // v1 参考: docs/reference/jnsvote/jnsVoteInfoController.js
 
 import { ref } from 'vue'
+import { writeContract, switchChain, waitForTransactionReceipt, simulateContract } from 'wagmi/actions'
 import { publicClient } from '../config/client'
+import { jouleverseChain } from '../config/chain'
+import { config as wagmiConfig } from '../stores/wallet'
 import { JNSVOTE_ADDRESS, JTI_ADDRESS, jnsVoteABI, jtiABI } from '../contracts/jnsvote'
 import { JNS_ADDRESS, jnsABI } from '../contracts/jns'
 import { jnsvoteDecision, approvalRate, representativeRate } from '../utils/jnsvote-decision'
+import { safeErrorMessage } from '../utils/error'
 
 const BLOCK_TIME_SEC = 15 // Jouleverse 平均出块时间（v1 用 15s 估算倒计时）
+
+// 切链失败（钱包不支持自动切换，需用户手动切换）
+export class SwitchChainError extends Error {
+  constructor() {
+    super('钱包未切换到 Jouleverse 网络')
+    this.name = 'SwitchChainError'
+  }
+}
+
+// 将合约 revert reason / 钱包错误映射为友好中文提示
+// require 文案见 docs/reference/jnsvote/jns_vote.sol 中 vote() 的五条约束
+export function mapVoteError(error: unknown): string {
+  // 优先取 viem 的 shortMessage（干净文案），同时兼顾 message（含 reason）与 reason 字段
+  const msg = safeErrorMessage(error)
+  const raw = String(
+    (error as { shortMessage?: string } | null)?.shortMessage ??
+    (error as { reason?: string } | null)?.reason ??
+    msg,
+  )
+  // 用户拒绝签名（MetaMask 4001 / wagmi UserRejectedRequestError）
+  if (/user rejected|denied|rejected the request|cancelled|4001/i.test(msg + ' ' + raw)) {
+    return '已取消投票'
+  }
+  if (/not yet started/i.test(raw)) return '提案尚未开始投票'
+  if (/already ended/i.test(raw)) return '提案投票已结束'
+  if (/already voted/i.test(raw)) return '您已投过票，无法重复投票'
+  if (/not a qualified voter|without having jti/i.test(raw)) return '您未持有 JTI，无投票资格'
+  if (/not having a jns/i.test(raw)) return '您未持有 JNS 域名，无投票资格'
+  // 兜底：返回干净信息（可能含技术细节，但比吞掉错误更利于排查）
+  return msg
+}
 
 export type ProposalStatus = 'pending' | 'active' | 'ended'
 
@@ -56,8 +91,9 @@ export function useJNSVote() {
   }
 
   // 加载全部提案（multicall 聚合读取，1 次 RPC 读全部提案；multicall3 已于 2026-08-11 自部署）
-  async function loadProposals() {
-    isLoading.value = true
+  async function loadProposals(options?: { silent?: boolean }) {
+    const silent = options?.silent ?? false
+    if (!silent) isLoading.value = true
     loadError.value = null
     try {
       const block = await fetchCurrentBlock()
@@ -152,9 +188,10 @@ export function useJNSVote() {
 
       proposals.value = list
     } catch (e) {
-      loadError.value = e instanceof Error ? e.message : String(e)
+      // 静默刷新失败不打断现有展示（保持已有数据）
+      if (!silent) loadError.value = e instanceof Error ? e.message : String(e)
     } finally {
-      isLoading.value = false
+      if (!silent) isLoading.value = false
     }
   }
 
@@ -183,19 +220,28 @@ export function useJNSVote() {
 
   // 检查某地址在哪些提案已投票（multicall 并行查 _jti_voted）
   async function checkVoted(address: string, proposalIds: number[]) {
-    const calls = proposalIds.map((id) => ({
-      address: JNSVOTE_ADDRESS as `0x${string}`,
-      abi: jnsVoteABI,
-      functionName: '_jti_voted' as const,
-      args: [BigInt(id), address as `0x${string}`] as const,
-    }))
-    const results = await publicClient.multicall({ contracts: calls, allowFailure: true })
     const voted = new Set<number>()
-    results.forEach((res, idx) => {
-      if (res.result && (res.result as readonly unknown[])[0] !== 0n) {
-        voted.add(proposalIds[idx])
-      }
-    })
+    // 提案列表为空时跳过（例如钱包恢复早于提案加载的竞态窗口）
+    if (proposalIds.length === 0) {
+      votedProposals.value = voted
+      return voted
+    }
+    try {
+      const calls = proposalIds.map((id) => ({
+        address: JNSVOTE_ADDRESS as `0x${string}`,
+        abi: jnsVoteABI,
+        functionName: '_jti_voted' as const,
+        args: [BigInt(id), address as `0x${string}`] as const,
+      }))
+      const results = await publicClient.multicall({ contracts: calls, allowFailure: true })
+      results.forEach((res, idx) => {
+        if (res.result && (res.result as readonly unknown[])[0] !== 0n) {
+          voted.add(proposalIds[idx])
+        }
+      })
+    } catch {
+      // RPC 失败：保持空集合，不阻塞页面
+    }
     votedProposals.value = voted
     return voted
   }
@@ -212,6 +258,61 @@ export function useJNSVote() {
     if (hours > 0) result += `${hours}小时`
     if (minutes > 0) result += `${minutes}分钟`
     return result || '即将'
+  }
+
+  // 投赞成/反对票（写操作，需钱包签名）
+  // 流程：确保链正确 → 发送交易 → 等待链上确认（合约 revert 时抛出，含 require reason）
+  async function vote(proposalId: number, isFor: boolean): Promise<`0x${string}`> {
+    // 1. 确保钱包在 Jouleverse 链上（已在目标链时 switchChain 直接成功）
+    try {
+      await switchChain(wagmiConfig, { chainId: jouleverseChain.id })
+    } catch {
+      throw new SwitchChainError()
+    }
+
+    // 2. 发送交易（wagmi 内部先 simulate 预估 gas，合约 revert 会在此阶段抛出）
+    const hash = isFor
+      ? await writeContract(wagmiConfig, {
+          address: JNSVOTE_ADDRESS,
+          abi: jnsVoteABI,
+          functionName: 'voteFor',
+          args: [BigInt(proposalId)],
+        })
+      : await writeContract(wagmiConfig, {
+          address: JNSVOTE_ADDRESS,
+          abi: jnsVoteABI,
+          functionName: 'voteAgainst',
+          args: [BigInt(proposalId)],
+        })
+
+    // 3. 等待链上确认
+    const receipt = await waitForTransactionReceipt(wagmiConfig, { hash })
+
+    // 4. 校验 receipt.status：viem 不会在 revert 时抛错，需显式检查
+    //    （模拟与上链之间状态可能变化，如并发标签页重复投票 → already voted）
+    if (receipt.status === 'reverted') {
+      // 交易已挖出但被 revert：重放同参数模拟以拿到精确 require reason
+      throw await resolveRevertReason(proposalId, isFor)
+    }
+
+    return hash
+  }
+
+  // revert 后重放 simulate 以还原合约 require reason（供 mapVoteError 映射）
+  async function resolveRevertReason(proposalId: number, isFor: boolean): Promise<Error> {
+    try {
+      await simulateContract(wagmiConfig, {
+        address: JNSVOTE_ADDRESS,
+        abi: jnsVoteABI,
+        functionName: isFor ? 'voteFor' : 'voteAgainst',
+        args: [BigInt(proposalId)],
+      })
+      // 模拟通过（说明 revert 由并发时序造成，现已无碍）→ 抛通用错误
+      return new Error('交易已回滚')
+    } catch (e) {
+      // 模拟失败：e 携带合约 revert reason，交给 mapVoteError 映射
+      return e instanceof Error ? e : new Error(String(e))
+    }
   }
 
   // 初始化：加载提案 + （可选）资格/已投检查
@@ -234,6 +335,7 @@ export function useJNSVote() {
     loadProposals,
     checkEligibility,
     checkVoted,
+    vote,
     formatCountdown,
     init,
   }
