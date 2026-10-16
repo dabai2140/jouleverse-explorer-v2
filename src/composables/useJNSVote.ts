@@ -103,7 +103,7 @@ function parseBadgeMetadata(tokenId: number, tokenURI: string): JNSVoteBadge {
     const meta = JSON.parse(jsonStr)
     return {
       tokenId,
-      proposal: Number(meta.proposal ?? 0),
+      proposal: Number(meta.proposal ?? -1),
       name: typeof meta.name === 'string' ? meta.name : `JNSVote #${tokenId}`,
       // 纵深防御：仅放行 data:image/ 内联图，拦截 http(s):// 等外链 URI，避免泄露访问者 IP
       image: typeof meta.image === 'string' && meta.image.startsWith('data:image/') ? meta.image : null,
@@ -155,7 +155,10 @@ export function useJNSVote() {
     const seq = ++proposalsSeq
     // 静默刷新仅在有数据时静默；无数据（首载失败后自愈重试）时与首载一致，正常显示加载/错误态
     const quiet = silent && proposals.value.length > 0
-    if (!quiet) isLoading.value = true
+    // setLoading：本次调用是否负责显示 loading；由「设过 loading 的调用」在 finally 解除，
+    // 避免非静默调用被后续静默调用抢占 seq 后 loading 永久卡住
+    const setLoading = !quiet
+    if (setLoading) isLoading.value = true
     loadError.value = null
     try {
       // 优先复用已知块高（WS 推送或上次读取），跳过内部 HTTP getBlockNumber，避免冗余 RPC 与块高回退
@@ -258,7 +261,8 @@ export function useJNSVote() {
       // 静默刷新（已有数据）失败不打断展示；无数据时（首载失败）始终暴露错误
       if (!quiet) loadError.value = e instanceof Error ? e.message : String(e)
     } finally {
-      if (seq === proposalsSeq && !quiet) isLoading.value = false
+      // 由「本次设过 loading」的调用解除，而非仅 seq 最新者（避免静默调用抢占 seq 后永久卡住）
+      if (setLoading) isLoading.value = false
     }
   }
 
