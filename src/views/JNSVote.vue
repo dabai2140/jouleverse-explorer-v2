@@ -395,8 +395,8 @@ onMounted(async () => {
     onBlockNumber(blockNumber) {
       // 收到新区块说明 WS 已恢复在线
       wsLive.value = true
-      // 倒计时联动：更新当前区块，倒计时基于 currentBlock 自动重算
-      currentBlock.value = blockNumber
+      // 倒计时联动：更新当前区块（只前进不后退，避免 WS/HTTP 连不同节点时倒计时回跳）
+      if (blockNumber > currentBlock.value) currentBlock.value = blockNumber
       // 存在 active/pending 提案时刷新票数与状态翻转；首载失败（曾报错）时借区块推进自愈重试
       if (needsLiveRefresh.value || loadError.value !== null) {
         loadProposals({ silent: true, block: blockNumber })
