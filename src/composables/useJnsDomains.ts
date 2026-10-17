@@ -28,6 +28,59 @@ const MULTICALL_CHUNK = 300
 /** 首屏 / 「加载更多」每页域名数 */
 export const JNS_DOMAINS_PAGE_SIZE = 120
 
+// ── localStorage 缓存层（stale-while-revalidate）──
+// 维护者硬要求（Issue #21）：域名发现页必须有缓存/预生成，不能纯前端实时读链。
+// 策略：全量加载完成后写入完整列表；首屏命中先渲染缓存、再后台静默重验证；
+// 损坏/过期/读写失败一律静默降级为无缓存（绝不把「缓存异常」伪装成「链上无域名」）。
+const CACHE_KEY = 'jns-domains-v1'
+const CACHE_TTL_MS = 10 * 60 * 1000 // 10 分钟
+
+interface JnsDomainsCache {
+  savedAt: number
+  totalSupply: number
+  /** 上次全量加载的失败计数（保留 failedCount 语义，避免缓存掩盖真实读取失败） */
+  failed: number
+  domains: JnsDomainEntry[]
+}
+
+function isValidEntry(d: unknown): d is JnsDomainEntry {
+  if (typeof d !== 'object' || d === null) return false
+  const e = d as Record<string, unknown>
+  return typeof e.tokenId === 'number'
+    && typeof e.name === 'string'
+    && typeof e.owner === 'string'
+    && typeof e.boundAddress === 'string'
+    && typeof e.isBound === 'boolean'
+    && typeof e.boundUnknown === 'boolean'
+}
+
+function readCache(): JnsDomainsCache | null {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as JnsDomainsCache
+    if (typeof parsed !== 'object' || parsed === null) return null
+    if (typeof parsed.totalSupply !== 'number' || parsed.totalSupply < 0) return null
+    if (typeof parsed.savedAt !== 'number') return null
+    if (typeof parsed.failed !== 'number') parsed.failed = 0
+    if (!Array.isArray(parsed.domains) || !parsed.domains.every(isValidEntry)) return null
+    if (Date.now() - parsed.savedAt > CACHE_TTL_MS) return null // 过期
+    return parsed
+  } catch {
+    // 读取/解析失败 → 静默降级为无缓存
+    return null
+  }
+}
+
+function writeCache(totalSupply: number, failed: number, domains: JnsDomainEntry[]): void {
+  try {
+    const payload: JnsDomainsCache = { savedAt: Date.now(), totalSupply, failed, domains }
+    localStorage.setItem(CACHE_KEY, JSON.stringify(payload))
+  } catch {
+    // 写失败（配额满/隐私模式等）→ 静默，不影响页面
+  }
+}
+
 // jns.ts 的 ABI 只列了「按 owner 枚举」的子集；整集枚举（ERC721Enumerable）还缺
 // totalSupply / tokenByIndex 两个只读方法（链上已实测存在，见 smoke-jns-domains.mjs
 // Phase 1/2）。不改共享的 jns.ts，在本文件内扩展（参考仓库 ABI 同一格式）。
@@ -81,6 +134,8 @@ export function useJnsDomains() {
 
   // 并发守卫：刷新/翻页交错时丢弃过期请求的写入（同 useJNSVote 的 seq 模式）
   let seq = 0
+  // 后台静默刷新专用序号：与主 seq 隔离，避免后台刷新与用户手动操作互相干扰
+  let refreshSeq = 0
   // 组件卸载取消：onScopeDispose 置位后不再写状态、不再继续打 RPC（loadAll 循环体短路）
   let disposed = false
   onScopeDispose(() => { disposed = true })
@@ -173,6 +228,20 @@ export function useJnsDomains() {
 
   // 首屏（兼作刷新/重试）：重置后加载最新一页
   async function loadFirstPage() {
+    // 缓存命中：先渲染缓存内容，再后台静默刷新（stale-while-revalidate）
+    const cached = readCache()
+    if (cached && cached.domains.length > 0) {
+      totalSupply.value = cached.totalSupply
+      domains.value = cached.domains
+      loadedCount.value = cached.totalSupply // 缓存来自全量加载，游标视为已全覆盖
+      failedCount.value = cached.failed
+      isLoading.value = false
+      loadError.value = null
+      // 后台静默刷新：不阻塞渲染，失败静默（保留缓存数据）
+      void silentRefresh()
+      return
+    }
+
     const mySeq = ++seq
     isLoading.value = true
     loadError.value = null
@@ -247,11 +316,56 @@ export function useJnsDomains() {
         loadedCount.value += end - start + 1
         failedCount.value += failed
       }
+      // 全量加载完成后写缓存（仅此一处，避免每批都写 localStorage）
+      if (totalSupply.value > 0) {
+        writeCache(totalSupply.value, failedCount.value, domains.value)
+      }
     } catch (e) {
       if (mySeq !== seq || disposed) return
       loadError.value = safeErrorMessage(e)
     } finally {
       if (mySeq === seq && !disposed) isLoading.value = false
+    }
+  }
+
+  // 后台静默刷新：全量枚举一遍（分块），完成后更新状态 + 写缓存。
+  // 不设 isLoading、失败静默（保留当前缓存渲染），绝不把刷新失败伪装成错误态或空态。
+  async function silentRefresh() {
+    if (disposed) return
+    const mySeq = ++refreshSeq
+    try {
+      const total = await fetchTotalSupply()
+      if (mySeq !== refreshSeq || disposed) return
+      if (total <= 0) {
+        // 链上确实无域名：清空并写缓存（避免陈旧缓存掩盖新增域名）
+        totalSupply.value = 0
+        domains.value = []
+        loadedCount.value = 0
+        failedCount.value = 0
+        writeCache(0, 0, [])
+        return
+      }
+      const all: JnsDomainEntry[] = []
+      let failed = 0
+      let covered = 0
+      while (covered < total) {
+        if (mySeq !== refreshSeq || disposed) return
+        const end = total - 1 - covered
+        const start = Math.max(0, end - MULTICALL_CHUNK + 1)
+        const { entries, failed: f } = await fetchRange(start, end)
+        if (mySeq !== refreshSeq || disposed) return
+        all.push(...entries)
+        failed += f
+        covered += end - start + 1
+      }
+      if (mySeq !== refreshSeq || disposed) return
+      totalSupply.value = total
+      domains.value = all
+      loadedCount.value = covered
+      failedCount.value = failed
+      writeCache(total, failed, all)
+    } catch {
+      // 静默刷新失败：保留缓存渲染，不报错、不设 loadError（否则会掩盖缓存数据）
     }
   }
 
