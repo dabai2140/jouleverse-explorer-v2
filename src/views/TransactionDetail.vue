@@ -96,7 +96,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onScopeDispose } from 'vue'
 import { publicClient } from '../config/client'
 import { formatNumber, formatAge } from '../utils/format'
 import { JvHashText, JvStatusTag, JvAmount, JvPageState } from '../design-system'
@@ -112,6 +112,16 @@ const loading = ref(true)
 const txHash = ref(props.hash)
 const inputExpanded = ref(false)
 const copyState = ref<'idle' | 'copied' | 'error'>('idle')
+let copyTimer: ReturnType<typeof setTimeout> | undefined
+
+/** 重置 copyState 的定时器：保存 id，下次触发前先 clearTimeout，避免旧定时器把新状态提前重置 */
+const scheduleCopyReset = (delayMs: number) => {
+  if (copyTimer !== undefined) clearTimeout(copyTimer)
+  copyTimer = setTimeout(() => { copyState.value = 'idle'; copyTimer = undefined }, delayMs)
+}
+
+// 组件卸载时清理挂起的 copyTimer，避免卸载后定时器仍触发（与仓库 disposed/onScopeDispose 风格一致）
+onScopeDispose(() => { if (copyTimer !== undefined) clearTimeout(copyTimer) })
 
 const formatTimestamp = (timestamp: bigint): string => {
   const date = new Date(Number(timestamp) * 1000)
@@ -147,11 +157,11 @@ const copyInput = async () => {
     if (!navigator.clipboard?.writeText) throw new Error('clipboard unavailable')
     await navigator.clipboard.writeText(transaction.value.input)
     copyState.value = 'copied'
-    setTimeout(() => { copyState.value = 'idle' }, 1500)
+    scheduleCopyReset(1500)
   } catch {
     // 剪贴板不可用（非 HTTPS / 权限被拒）：友好提示，不抛错、不白屏
     copyState.value = 'error'
-    setTimeout(() => { copyState.value = 'idle' }, 2500)
+    scheduleCopyReset(2500)
   }
 }
 
