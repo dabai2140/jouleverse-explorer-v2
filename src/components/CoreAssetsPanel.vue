@@ -138,8 +138,8 @@ const isFungible = (a: CoreAsset) => a.kind === 'native' || a.kind === 'erc20'
 // 因此暗/亮色自动跟随 var(--jv-text-primary)，且 SVG 源文件无需任何改动。
 // 内联 style 绑定避免 CSS url() 的路径解析问题，需同时给 mask-image 与 -webkit-mask-image（Safari 前缀）。
 const iconStyle = (icon: string) => ({
-  maskImage: `url(${icon})`,
-  WebkitMaskImage: `url(${icon})`,
+  maskImage: `url("${icon}")`,
+  WebkitMaskImage: `url("${icon}")`,
 })
 
 // 空态判定：加载完成、无错误、且所有资产余额均为 0n 时才算「暂无资产」。
