@@ -94,10 +94,12 @@
 
 - **格式**：SVG（矢量、体积小、可随主题变色）；如官方只给 PNG，可先 PNG 后转 SVG。
 - **命名规范**：`asset-j.svg`、`asset-wj.svg`、`asset-jns.svg`、`asset-popbadge.svg`、`asset-coreid.svg`、`asset-jti.svg`、`asset-jnsvote.svg`（前缀 `asset-` 防与品牌 logo 混）。
-- **存放目录**：`src/assets/icons/`（当前 `src/assets/` 下只有 hero.png / vite.svg / vue.svg，无现成资产图标）。
-- **替换方式**：`core-assets.ts` 的 `icon` 字段从 emoji 改为 import 的本地 SVG 路径（或 URL），`CoreAssetsPanel.vue` 的 `<span class="asset-icon">` 改为 `<img :src="item.asset.icon">`（或统一走一个 `AssetIcon` 组件）。
+- **存放目录**：`src/assets/icons/`（7 个官方资产 SVG 已在 PR #23 落地于此目录，详见下方「状态」）。
+- **替换方式**：`core-assets.ts` 的 `icon` 字段从 emoji 改为 import 的本地 SVG 路径（或 URL）；渲染方式见下方 mask 注意项。
 
-**状态**：待官方提供图源后替换。当前仓库**无**任何现成官方资产图标资源（已核实 src/assets/ 与 public/）。
+**状态**：7 个官方资产 SVG（`asset-j` / `wj` / `jns` / `jnsvote` / `jti` / `popbadge` / `coreid`）已在 **PR #23 落地、待合并**，路径 `src/assets/icons/`。
+
+> ⚠️ 渲染方式注意（#23 审计踩坑记录）：单色 SVG 若用 `<img :src>` 加载，SVG 是独立文档，`currentColor` 解析为默认黑色，宿主页 CSS 变量传不进去，暗色模式下图标全黑不可见。正确做法是 **CSS mask + background: currentColor**（`CoreAssetsPanel.vue` 已按此实现：模板 `<span class="asset-icon">` + 内联 mask-image，颜色由宿主 CSS 变量驱动，暗/亮自动跟随）。
 
 ---
 
