@@ -8,6 +8,13 @@
       action="重试"
       @action="load"
     />
+    <!-- TODO(i18n): 「暂无资产」为中文硬编码；待 PR #22 的 7 语种 i18n 合并进 explorer-v2 后统一迁移 -->
+    <JvPageState
+      v-else-if="isEmpty"
+      type="empty"
+      title="暂无资产"
+      description="该地址暂未持有任何生态资产"
+    />
     <template v-else>
       <!-- 余额类（native / erc20）+ NFT 数量概览：一次 multicall 结果 -->
       <div class="asset-list">
@@ -76,12 +83,37 @@ const props = defineProps<Props>()
 
 const router = useRouter()
 
-const { balances, isLoading, error, load } = useCoreAssets(() => props.address)
+const { balances, isLoading, error, load, getBalance } = useCoreAssets(() => props.address)
+
+const emit = defineEmits<{
+  (e: 'wj-balance', value: bigint | null): void
+}>()
+
+// 余额加载完成后把 WJ 余额上报父级（AddressDetail 喂给 WJOperations），
+// 消除 AddressDetail 里 loadWJBalance 的重复 balanceOf 读取
+watch(balances, () => {
+  emit('wj-balance', getBalance('wj'))
+})
 
 const isFungible = (a: CoreAsset) => a.kind === 'native' || a.kind === 'erc20'
 
+// 空态判定：加载完成、无错误、且所有资产余额均为 0n 时才算「暂无资产」。
+// 任何一项 value === null（读取失败）都不算空，避免把「读失败」误判为「零资产」
+const isEmpty = computed(() =>
+  !isLoading.value && !error.value &&
+  balances.value.length > 0 &&
+  balances.value.every((b) => b.value === 0n),
+)
+
+// 大额数量缩写：≥1亿 → X.X亿；≥1万 → X.X万；其余原样。
+// 精度 1 位小数，去掉尾部 .0，避免过度缩写丢失信息。
+// TODO(i18n): 「万」「亿」为中文硬编码；待 PR #22 的 7 语种 i18n 合并进 explorer-v2 后统一迁移
 const formatCount = (n: bigint): string => {
-  try { return BigInt(n).toString() } catch { return '0' }
+  let v: number
+  try { v = Number(BigInt(n)) } catch { return '0' }
+  if (v >= 1e8) return `${(v / 1e8).toFixed(1).replace(/\.0$/, '')}亿`
+  if (v >= 1e4) return `${(v / 1e4).toFixed(1).replace(/\.0$/, '')}万`
+  return String(v)
 }
 
 // ── JNS 域名枚举（分页懒加载）──
@@ -99,21 +131,23 @@ const loadJns = async () => {
   const myReq = ++jnsRequestId
   loadingJns.value = true
   try {
-    // multicall 聚合：balanceOf + tokenOfOwnerByIndex×10 + _allTokensName×10 → 2 次 RPC
-    const { balance, balanceUnknown, names } = await fetchJnsHoldingBatch(props.address as `0x${string}`, 0, JNS_BATCH_SIZE, true)
-    if (myReq !== jnsRequestId) return // 过期请求，丢弃
-    // 失败 ≠ 零：balanceUnknown 时置 null，UI 显式提示「未知」，绝不用 0 掩盖
-    if (balanceUnknown) {
+    // 复用 useCoreAssets 已读的 JNS 余额（getBalance('jns')），消除重复 balanceOf
+    const jnsBal = getBalance('jns')
+    // 失败 ≠ 零：余额读取失败（null）时置 null，UI 显式提示「未知」，绝不用 0 掩盖
+    if (jnsBal === null) {
       jnsTotal.value = null
       jnsNames.value = []
       jnsLoaded.value = 0
       return
     }
-    const total = Number(balance ?? 0n)
+    const total = Number(jnsBal)
     jnsTotal.value = total
     jnsNames.value = []
     if (total === 0) return
     const end = Math.min(JNS_BATCH_SIZE, Math.min(total, JNS_MAX_DISPLAY))
+    // withBalance=false：只枚举 tokenOfOwnerByIndex + _allTokensName，不再重复读 balanceOf
+    const { names } = await fetchJnsHoldingBatch(props.address as `0x${string}`, 0, end, false)
+    if (myReq !== jnsRequestId) return
     jnsNames.value.push(...names.slice(0, end))
     jnsLoaded.value = Math.min(end, names.length)
   } catch (e) {
@@ -150,14 +184,14 @@ const loadMoreJns = async () => {
   }
 }
 
-onMounted(() => {
-  load()
-  loadJns()
+onMounted(async () => {
+  await load()
+  await loadJns()
 })
 
-watch(() => props.address, () => {
-  load()
-  loadJns()
+watch(() => props.address, async () => {
+  await load()
+  await loadJns()
 })
 </script>
 

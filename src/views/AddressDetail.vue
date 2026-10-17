@@ -52,7 +52,7 @@
       <!-- 资产（配置驱动统一视图：J / WJ / NFT 余额 + JNS 明细） -->
       <div class="panel">
         <h2>💼 资产</h2>
-        <CoreAssetsPanel :address="hexAddress" />
+        <CoreAssetsPanel :address="hexAddress" @wj-balance="wjBalance = $event" />
       </div>
 
       <!-- WJ 信息 -->
@@ -141,7 +141,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { formatEther } from 'viem'
 import { formatAddress } from '../utils/format'
-import { WJ_ADDRESS, wjABI } from '../contracts/wj'
+import { WJ_ADDRESS } from '../contracts/wj'
 import { JNS_ADDRESS, jnsABI } from '../contracts/jns'
 import CoreAssetsPanel from '../components/CoreAssetsPanel.vue'
 import WJOperations from './WJOperations.vue'
@@ -176,8 +176,9 @@ function initAddress(raw: string) {
 
 const jnsName = ref<string | null>(null)
 
+// WJ 余额：由 CoreAssetsPanel 统一读取后通过 @wj-balance 事件回传，
+// 消除此处与 useCoreAssets 的重复 balanceOf 读取
 const wjBalance = ref<bigint | null>(null)
-const loadingWJ = ref(true)
 
 const TRANSFER_SIG = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef' as `0x${string}`
 
@@ -219,14 +220,6 @@ const formatBalance = (bal: bigint | null): string => {
   return parseFloat(formatEther(bal)).toFixed(4)
 }
 
-
-const loadWJBalance = async () => {
-  loadingWJ.value = true
-  try {
-    wjBalance.value = await publicClient.readContract({ address: WJ_ADDRESS, abi: wjABI, functionName: 'balanceOf', args: [hexAddress.value as `0x${string}`] }) as bigint
-  } catch { wjBalance.value = null }
-  finally { loadingWJ.value = false }
-}
 
 const loadJnsName = async () => {
   try {
@@ -368,7 +361,7 @@ const nextYear = () => {
 
 onMounted(() => {
   if (error.value) return
-  loadWJBalance(); loadJnsName()
+  loadJnsName()
   loadTransactions(currentYear.value)
 })
 </script>
