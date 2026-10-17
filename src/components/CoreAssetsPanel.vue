@@ -18,29 +18,63 @@
     <template v-else>
       <!-- 余额类（native / erc20）+ NFT 数量概览：一次 multicall 结果 -->
       <div class="asset-list">
-        <div
+        <template
           v-for="item in balances"
           :key="item.asset.key"
-          class="asset-row"
         >
-          <span class="asset-icon">{{ item.asset.icon }}</span>
-          <div class="asset-main">
-            <span class="asset-name">{{ item.asset.name }}</span>
-            <span class="asset-symbol muted">{{ item.asset.symbol }}</span>
+          <div class="asset-row">
+            <span class="asset-icon">{{ item.asset.icon }}</span>
+            <div class="asset-main">
+              <span class="asset-name">{{ item.asset.name }}</span>
+              <span class="asset-symbol muted">{{ item.asset.symbol }}</span>
+            </div>
+            <div class="asset-value">
+              <JvAmount
+                v-if="isFungible(item.asset) && item.value !== null"
+                :value="item.value"
+                :decimals="item.asset.decimals ?? 18"
+                :unit="item.asset.symbol"
+              />
+              <span v-else-if="isFungible(item.asset)" class="muted">—</span>
+              <span v-else class="asset-count">
+                {{ item.value === null ? '—' : `${formatCount(item.value)} 个` }}
+              </span>
+            </div>
+            <!-- 可枚举 NFT：持有 > 0 时提供「展开」入口（二级懒加载） -->
+            <button
+              v-if="isEnumerableNft(item.asset.key) && item.value !== null && item.value > 0n"
+              class="btn-expand"
+              :class="{ active: expandedKey === item.asset.key }"
+              @click="toggleExpand(item.asset.key)"
+            >
+              {{ expandedKey === item.asset.key ? '收起' : '展开' }}
+            </button>
           </div>
-          <div class="asset-value">
-            <JvAmount
-              v-if="isFungible(item.asset) && item.value !== null"
-              :value="item.value"
-              :decimals="item.asset.decimals ?? 18"
-              :unit="item.asset.symbol"
-            />
-            <span v-else-if="isFungible(item.asset)" class="muted">—</span>
-            <span v-else class="asset-count">
-              {{ item.value === null ? '—' : `${formatCount(item.value)} 个` }}
-            </span>
+
+          <!-- 展开后的 NFT 枚举（分页懒加载，首屏 RPC 不受影响） -->
+          <div v-if="expandedKey === item.asset.key" class="nft-enum-panel">
+            <div class="nft-enum-head muted">
+              {{ item.asset.name }} 明细
+            </div>
+            <JvLoading v-if="nftEnumLoading && nftEnumItems.length === 0" label="加载中..." />
+            <div v-else-if="nftEnumError" class="nft-enum-error muted">
+              枚举失败：{{ nftEnumError }}
+              <button class="btn-load-more" @click="nftEnumLoadMore">重试</button>
+            </div>
+            <div v-else class="nft-enum-list">
+              <div v-for="it in nftEnumItems" :key="it.tokenId" class="nft-enum-item">
+                <img v-if="it.image" :src="it.image" :alt="it.name" class="nft-enum-img" loading="lazy" />
+                <div v-else class="nft-enum-img nft-enum-fallback">🖼️</div>
+                <span class="nft-enum-name" :title="it.name">{{ it.name }}</span>
+              </div>
+            </div>
+            <div v-if="nftEnumLoaded < enumTotalCount" class="nft-enum-more">
+              <button class="btn-load-more" :disabled="nftEnumLoading" @click="nftEnumLoadMore">
+                {{ nftEnumLoading ? '加载中...' : `加载更多（已显示 ${nftEnumLoaded} / ${enumTotalCount}）` }}
+              </button>
+            </div>
           </div>
-        </div>
+        </template>
       </div>
 
       <!-- JNS 域名枚举：分页懒加载，首屏只出前几个 -->
@@ -75,6 +109,9 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { fetchJnsHoldingBatch } from '../utils/jns-holdings'
 import { useCoreAssets } from '../composables/useCoreAssets'
+import { useNftEnumeration } from '../composables/useNftEnumeration'
+import { POPBADGE_ADDRESS } from '../contracts/popbadge'
+import { JNSVOTE_ADDRESS, JTI_ADDRESS } from '../contracts/jnsvote'
 import { JvLoading, JvPageState, JvAmount } from '../design-system'
 import type { CoreAsset } from '../config/core-assets'
 
@@ -184,12 +221,59 @@ const loadMoreJns = async () => {
   }
 }
 
+// ── NFT 枚举（二级懒加载：POPBadge / JNSVote / JTI）──
+// 首屏只显示「共持有 N 个」，点击「展开」后才枚举该类前 10 个，首屏 RPC 不变。
+const NFT_ENUM_CONFIG: Record<string, `0x${string}`> = {
+  popbadge: POPBADGE_ADDRESS,
+  jnsvote: JNSVOTE_ADDRESS,
+  jti: JTI_ADDRESS,
+}
+
+const isEnumerableNft = (key: string) => key in NFT_ENUM_CONFIG
+
+// 当前展开的 NFT key（同一时刻只展开一类）
+const expandedKey = ref<string | null>(null)
+
+// 展开类的持有总数（来自 useCoreAssets 已读的 balanceOf；null=读取失败，视为 0，UI 不提供展开）
+const enumTotalCount = computed(() => {
+  const k = expandedKey.value
+  if (!k) return 0
+  const bal = getBalance(k)
+  return bal === null ? 0 : Number(bal)
+})
+
+const {
+  items: nftEnumItems,
+  loading: nftEnumLoading,
+  error: nftEnumError,
+  loaded: nftEnumLoaded,
+  loadMore: nftEnumLoadMore,
+  reset: nftEnumReset,
+} = useNftEnumeration(
+  () => (expandedKey.value ? NFT_ENUM_CONFIG[expandedKey.value] : ('0x0000000000000000000000000000000000000000' as `0x${string}`)),
+  () => props.address,
+  () => enumTotalCount.value,
+)
+
+function toggleExpand(key: string) {
+  if (expandedKey.value === key) {
+    expandedKey.value = null
+    nftEnumReset()
+  } else {
+    expandedKey.value = key
+    nftEnumReset()
+    nftEnumLoadMore()
+  }
+}
+
 onMounted(async () => {
   await load()
   await loadJns()
 })
 
 watch(() => props.address, async () => {
+  expandedKey.value = null
+  nftEnumReset()
   await load()
   await loadJns()
 })
@@ -218,6 +302,68 @@ watch(() => props.address, async () => {
 .asset-symbol { font-size: 0.78rem; }
 
 .asset-value { flex-shrink: 0; }
+
+.btn-expand {
+  flex-shrink: 0;
+  background: none;
+  border: 1px solid var(--jv-border);
+  color: var(--jv-text-secondary);
+  padding: 2px 10px;
+  border-radius: var(--jv-radius-full);
+  cursor: pointer;
+  font-size: 0.75rem;
+  transition: border-color var(--jv-duration-fast) var(--jv-ease),
+              color var(--jv-duration-fast) var(--jv-ease);
+}
+.btn-expand:hover { border-color: var(--jv-brand); color: var(--jv-brand); }
+.btn-expand.active { border-color: var(--jv-brand); color: var(--jv-brand); }
+
+.nft-enum-panel {
+  border-top: 1px dashed var(--jv-border);
+  padding-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.nft-enum-head { font-size: 0.82rem; }
+
+.nft-enum-list { display: flex; flex-wrap: wrap; gap: 10px; }
+
+.nft-enum-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 72px;
+}
+
+.nft-enum-img {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--jv-radius-md);
+  object-fit: cover;
+  background: var(--jv-bg-subtle);
+}
+.nft-enum-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.4rem;
+}
+
+.nft-enum-name {
+  font-size: 0.72rem;
+  color: var(--jv-text-secondary);
+  max-width: 72px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nft-enum-error { font-size: 0.82rem; display: flex; align-items: center; gap: 8px; }
+
+.nft-enum-more { display: flex; }
 
 .asset-count { color: var(--jv-text-primary); font-weight: 600; font-size: 0.9rem; }
 
