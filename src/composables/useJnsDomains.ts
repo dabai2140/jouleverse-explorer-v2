@@ -227,9 +227,10 @@ export function useJnsDomains() {
   }
 
   // 首屏（兼作刷新/重试）：重置后加载最新一页
-  async function loadFirstPage() {
-    // 缓存命中：先渲染缓存内容，再后台静默刷新（stale-while-revalidate）
-    const cached = readCache()
+  // force=true 时绕过缓存直达链上（手动刷新）；默认 false 走缓存 SWR
+  async function loadFirstPage(force = false) {
+    // 缓存命中：先渲染缓存内容，再按需后台静默刷新（stale-while-revalidate）
+    const cached = force ? null : readCache()
     if (cached && cached.domains.length > 0) {
       totalSupply.value = cached.totalSupply
       domains.value = cached.domains
@@ -237,8 +238,12 @@ export function useJnsDomains() {
       failedCount.value = cached.failed
       isLoading.value = false
       loadError.value = null
-      // 后台静默刷新：不阻塞渲染，失败静默（保留缓存数据）
-      void silentRefresh()
+      // 后台静默刷新：仅当缓存年龄超过 TTL 一半（5 分钟）才全量重验证，
+      // 避免每次挂载无条件全量枚举（822+ 域名 ≈ 12 次 multicall）违背缓存降 RPC 初衷
+      const ageMs = Date.now() - cached.savedAt
+      if (ageMs > CACHE_TTL_MS / 2) {
+        void silentRefresh()
+      }
       return
     }
 

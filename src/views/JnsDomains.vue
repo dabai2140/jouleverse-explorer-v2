@@ -173,7 +173,7 @@ const onLangChange = (e: Event) => {
   setLang((e.target as HTMLSelectElement).value as typeof lang.value)
 }
 
-const refresh = () => { loadFirstPage() }
+const refresh = () => { loadFirstPage(true) }
 
 const goDetail = (name: string) => {
   router.push(`/jns/${encodeURIComponent(name)}`)
