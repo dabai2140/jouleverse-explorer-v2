@@ -71,8 +71,11 @@
                   <button v-if="transaction.input.length > 50" class="input-btn" @click="inputExpanded = !inputExpanded">
                     {{ inputExpanded ? '收起' : '展开' }}
                   </button>
-                  <button class="input-btn" @click="copyInput">{{ inputCopied ? '已复制' : '复制' }}</button>
+                  <button class="input-btn" @click="copyInput">
+                    {{ copyState === 'copied' ? '已复制' : copyState === 'error' ? '复制失败' : '复制' }}
+                  </button>
                 </span>
+                <span v-if="copyState === 'error'" class="copy-hint">复制失败，请长按输入内容手动选择复制</span>
               </template>
             </div>
           </div>
@@ -108,7 +111,7 @@ const transaction = ref<any>(null)
 const loading = ref(true)
 const txHash = ref(props.hash)
 const inputExpanded = ref(false)
-const inputCopied = ref(false)
+const copyState = ref<'idle' | 'copied' | 'error'>('idle')
 
 const formatTimestamp = (timestamp: bigint): string => {
   const date = new Date(Number(timestamp) * 1000)
@@ -140,11 +143,15 @@ const formatInput = (input: string): string => {
 const copyInput = async () => {
   if (!transaction.value?.input) return
   try {
+    // 非 HTTPS 环境下 navigator.clipboard 可能为 undefined，需显式判空
+    if (!navigator.clipboard?.writeText) throw new Error('clipboard unavailable')
     await navigator.clipboard.writeText(transaction.value.input)
-    inputCopied.value = true
-    setTimeout(() => { inputCopied.value = false }, 1500)
+    copyState.value = 'copied'
+    setTimeout(() => { copyState.value = 'idle' }, 1500)
   } catch {
-    // 剪贴板不可用，静默失败
+    // 剪贴板不可用（非 HTTPS / 权限被拒）：友好提示，不抛错、不白屏
+    copyState.value = 'error'
+    setTimeout(() => { copyState.value = 'idle' }, 2500)
   }
 }
 
@@ -264,6 +271,12 @@ onMounted(() => { loadTransaction() })
   transition: border-color var(--jv-duration-fast) var(--jv-ease), color var(--jv-duration-fast) var(--jv-ease);
 }
 .input-btn:hover { border-color: var(--jv-brand); color: var(--jv-brand); }
+
+.copy-hint {
+  color: var(--jv-text-muted);
+  font-size: 0.78rem;
+  text-align: right;
+}
 
 .error-section {
   background: var(--jv-bg-surface);
