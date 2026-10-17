@@ -37,21 +37,24 @@
       </div>
 
       <!-- JNS 域名枚举：分页懒加载，首屏只出前几个 -->
-      <div v-if="jnsTotal > 0 || loadingJns" class="jns-detail">
+      <div v-if="jnsTotal !== 0 || loadingJns" class="jns-detail">
         <div class="jns-detail-head">
           <span class="muted">JNS 域名持有明细</span>
         </div>
         <JvLoading v-if="loadingJns && jnsNames.length === 0" label="加载中..." />
+        <div v-else-if="jnsTotal === null" class="jns-unknown muted">
+          域名数量读取失败，无法确定持有数量
+        </div>
         <div v-else>
           <div class="jns-list">
             <span v-for="name in jnsNames" :key="name" class="jns-tag" @click="goJnsDetail(name)">{{ name }}.j</span>
           </div>
-          <div v-if="jnsLoaded < Math.min(jnsTotal, JNS_MAX_DISPLAY)" class="jns-more">
+          <div v-if="jnsLoaded < Math.min(jnsTotalNum, JNS_MAX_DISPLAY)" class="jns-more">
             <button class="btn-load-more" :disabled="loadingJns" @click="loadMoreJns">
-              {{ loadingJns ? '加载中...' : `加载更多（已显示 ${jnsLoaded} / ${Math.min(jnsTotal, JNS_MAX_DISPLAY)}）` }}
+              {{ loadingJns ? '加载中...' : `加载更多（已显示 ${jnsLoaded} / ${Math.min(jnsTotalNum, JNS_MAX_DISPLAY)}）` }}
             </button>
           </div>
-          <p v-if="jnsTotal > JNS_MAX_DISPLAY" class="jns-overflow-hint muted">
+          <p v-if="jnsTotalNum > JNS_MAX_DISPLAY" class="jns-overflow-hint muted">
             前往 <a @click.prevent="$router.push('/jns')" href="#">JNS 查询页</a> 可查看全部域名
           </p>
         </div>
@@ -61,7 +64,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { fetchJnsHoldingBatch } from '../utils/jns-holdings'
 import { useCoreAssets } from '../composables/useCoreAssets'
@@ -73,7 +76,7 @@ const props = defineProps<Props>()
 
 const router = useRouter()
 
-const { balances, isLoading, error, load } = useCoreAssets(props.address)
+const { balances, isLoading, error, load } = useCoreAssets(() => props.address)
 
 const isFungible = (a: CoreAsset) => a.kind === 'native' || a.kind === 'erc20'
 
@@ -84,16 +87,28 @@ const formatCount = (n: bigint): string => {
 // ── JNS 域名枚举（分页懒加载）──
 const JNS_BATCH_SIZE = 10
 const JNS_MAX_DISPLAY = 50
-const jnsTotal = ref(0)
+const jnsTotal = ref<number | null>(null)
+const jnsTotalNum = computed(() => jnsTotal.value ?? 0)
 const jnsNames = ref<string[]>([])
 const jnsLoaded = ref(0)
 const loadingJns = ref(false)
+// 竞态保护：与 useCoreAssets 相同的请求序号，防止旧地址慢响应覆盖新地址
+let jnsRequestId = 0
 
 const loadJns = async () => {
+  const myReq = ++jnsRequestId
   loadingJns.value = true
   try {
     // multicall 聚合：balanceOf + tokenOfOwnerByIndex×10 + _allTokensName×10 → 2 次 RPC
-    const { balance, names } = await fetchJnsHoldingBatch(props.address as `0x${string}`, 0, JNS_BATCH_SIZE, true)
+    const { balance, balanceUnknown, names } = await fetchJnsHoldingBatch(props.address as `0x${string}`, 0, JNS_BATCH_SIZE, true)
+    if (myReq !== jnsRequestId) return // 过期请求，丢弃
+    // 失败 ≠ 零：balanceUnknown 时置 null，UI 显式提示「未知」，绝不用 0 掩盖
+    if (balanceUnknown) {
+      jnsTotal.value = null
+      jnsNames.value = []
+      jnsLoaded.value = 0
+      return
+    }
     const total = Number(balance ?? 0n)
     jnsTotal.value = total
     jnsNames.value = []
@@ -101,23 +116,38 @@ const loadJns = async () => {
     const end = Math.min(JNS_BATCH_SIZE, Math.min(total, JNS_MAX_DISPLAY))
     jnsNames.value.push(...names.slice(0, end))
     jnsLoaded.value = Math.min(end, names.length)
-  } catch { jnsTotal.value = 0 }
-  finally { loadingJns.value = false }
+  } catch (e) {
+    if (myReq !== jnsRequestId) return
+    // 请求级失败同样不能掩盖成 0：置 null 提示未知，而非清零
+    jnsTotal.value = null
+    jnsNames.value = []
+    jnsLoaded.value = 0
+    console.error('[CoreAssetsPanel] JNS 枚举加载失败:', e)
+  } finally {
+    if (myReq === jnsRequestId) loadingJns.value = false
+  }
 }
 
 const goJnsDetail = (name: string) => router.push(`/jns/${name}`)
 
 const loadMoreJns = async () => {
   if (loadingJns.value) return
+  const myReq = ++jnsRequestId
   loadingJns.value = true
   try {
     const start = jnsLoaded.value
-    const end = Math.min(start + JNS_BATCH_SIZE, Math.min(jnsTotal.value, JNS_MAX_DISPLAY))
+    const end = Math.min(start + JNS_BATCH_SIZE, Math.min(jnsTotal.value ?? 0, JNS_MAX_DISPLAY))
+    if (start >= end) return
     const { names } = await fetchJnsHoldingBatch(props.address as `0x${string}`, start, end - start, false)
+    if (myReq !== jnsRequestId) return
     jnsNames.value.push(...names)
     jnsLoaded.value = Math.min(end, start + names.length)
-  } catch { }
-  finally { loadingJns.value = false }
+  } catch (e) {
+    if (myReq !== jnsRequestId) return
+    console.error('[CoreAssetsPanel] JNS 加载更多失败:', e)
+  } finally {
+    if (myReq === jnsRequestId) loadingJns.value = false
+  }
 }
 
 onMounted(() => {
@@ -162,6 +192,8 @@ watch(() => props.address, () => {
 .jns-detail { border-top: 1px dashed var(--jv-border); padding-top: 14px; }
 
 .jns-detail-head { margin-bottom: 8px; }
+
+.jns-unknown { padding: 8px 0; }
 
 .jns-list { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
 

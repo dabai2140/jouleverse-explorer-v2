@@ -2,7 +2,7 @@
 // 依据 issue #21 铁律：余额类必须「收集 → 一次 multicall3」，严禁循环里逐个 await balanceOf
 // 结果按「J → ERC20 余额降序 → NFT 数量降序」排序
 
-import { ref, toValue, type MaybeRef } from 'vue'
+import { ref, toValue, type MaybeRefOrGetter } from 'vue'
 import { isAddress } from 'viem'
 import { publicClient } from '../config/client'
 import { CORE_ASSETS, KIND_ORDER, type CoreAsset, type AssetKind } from '../config/core-assets'
@@ -42,8 +42,7 @@ function sortByRule(list: AssetBalance[]): AssetBalance[] {
   })
 }
 
-export function useCoreAssets(address: MaybeRef<string>) {
-  const addr = toValue(address)
+export function useCoreAssets(address: MaybeRefOrGetter<string>) {
   const balances = ref<AssetBalance[]>([])
   const isLoading = ref(false)
   const error = ref<string | null>(null)
@@ -52,6 +51,9 @@ export function useCoreAssets(address: MaybeRef<string>) {
   let requestId = 0
 
   const load = async () => {
+    // 每次 load 都重新取当前地址（address 可能是 getter/ref/字符串），
+    // 避免 setup 时 toValue 一次性求值冻结，导致地址切换后仍查旧地址
+    const addr = toValue(address)
     if (!isAddress(addr)) {
       error.value = '地址格式无效'
       return
