@@ -23,7 +23,7 @@
           :key="item.asset.key"
         >
           <div class="asset-row">
-            <span class="asset-icon">{{ item.asset.icon }}</span>
+            <img :src="item.asset.icon" :alt="item.asset.name" class="asset-icon" />
             <div class="asset-main">
               <span class="asset-name">{{ item.asset.name }}</span>
               <span class="asset-symbol muted">{{ item.asset.symbol }}</span>
@@ -293,7 +293,7 @@ watch(() => props.address, async () => {
   border-radius: var(--jv-radius-md);
 }
 
-.asset-icon { font-size: 1.2rem; line-height: 1; flex-shrink: 0; }
+.asset-icon { width: 1.4rem; height: 1.4rem; flex-shrink: 0; color: var(--jv-text-primary); }
 
 .asset-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
 

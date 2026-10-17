@@ -2,6 +2,15 @@
 // 依据 issue #21 确认的技术组合：首批仅官方 6 合约 + 原生 J
 // 新增资产 = 加一条配置，不改组件代码；M2 迁 GitHub 注册表时只换加载层，UI 零改动
 
+// 官方资产图标（仓库内本地 SVG，24×24、fill=currentColor 自适应暗色）
+import iconJ from '../assets/icons/asset-j.svg'
+import iconWj from '../assets/icons/asset-wj.svg'
+import iconJns from '../assets/icons/asset-jns.svg'
+import iconPopbadge from '../assets/icons/asset-popbadge.svg'
+import iconCoreid from '../assets/icons/asset-coreid.svg'
+import iconJti from '../assets/icons/asset-jti.svg'
+import iconJnsvote from '../assets/icons/asset-jnsvote.svg'
+
 export type AssetKind = 'native' | 'erc20' | 'erc721'
 
 export interface CoreAsset {
@@ -15,7 +24,7 @@ export interface CoreAsset {
   kind: AssetKind
   /** 合约地址（native 为 null） */
   address: `0x${string}` | null
-  /** 仓库内本地图标（emoji 占位；官方图标走仓库内本地文件，M1 暂用 emoji） */
+  /** 仓库内本地图标（SVG URL） */
   icon: string
   /** ERC20 精度（native/erc721 无意义） */
   decimals?: number
@@ -28,7 +37,7 @@ export const CORE_ASSETS: CoreAsset[] = [
     symbol: 'J',
     kind: 'native',
     address: null,
-    icon: '⚡',
+    icon: iconJ,
     decimals: 18,
   },
   {
@@ -37,7 +46,7 @@ export const CORE_ASSETS: CoreAsset[] = [
     symbol: 'WJ',
     kind: 'erc20',
     address: '0x7fba9BB966189Db8C4fE33B7bf67Bfa24203c6AD',
-    icon: '💰',
+    icon: iconWj,
     decimals: 18,
   },
   {
@@ -46,7 +55,7 @@ export const CORE_ASSETS: CoreAsset[] = [
     symbol: 'JNS',
     kind: 'erc721',
     address: '0xf8AbF36Bb2dc525b1E566d6B42F6Fd1BB2035b89',
-    icon: '🏷️',
+    icon: iconJns,
   },
   {
     key: 'popbadge',
@@ -54,7 +63,7 @@ export const CORE_ASSETS: CoreAsset[] = [
     symbol: 'POP',
     kind: 'erc721',
     address: '0xCb1429da13cE40e75519148e796C6D58dD6b1a8E',
-    icon: '🎖️',
+    icon: iconPopbadge,
   },
   {
     key: 'coreid',
@@ -62,7 +71,7 @@ export const CORE_ASSETS: CoreAsset[] = [
     symbol: 'JVC',
     kind: 'erc721',
     address: '0x8d214415b9c5F5E4Cf4CbCfb4a5DEd47fb516392',
-    icon: '🆔',
+    icon: iconCoreid,
   },
   {
     key: 'jti',
@@ -70,7 +79,7 @@ export const CORE_ASSETS: CoreAsset[] = [
     symbol: 'JTI',
     kind: 'erc721',
     address: '0x826971d988d7d86Fdc9062A3f63E7b18D32Bc8EB',
-    icon: '🪪',
+    icon: iconJti,
   },
   {
     key: 'jnsvote',
@@ -78,7 +87,7 @@ export const CORE_ASSETS: CoreAsset[] = [
     symbol: 'JNSVote',
     kind: 'erc721',
     address: '0xEf1f38e95dd7F4FB564535F9317ecB3Bd419DA50',
-    icon: '🗳️',
+    icon: iconJnsvote,
   },
 ] as const
 
