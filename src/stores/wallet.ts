@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { createConfig, http } from 'wagmi'
-import { metaMask } from 'wagmi/connectors'
+import { injected } from 'wagmi/connectors'
 import { getPublicClient, reconnect } from '@wagmi/core'
 
 // Jouleverse chain config
@@ -24,7 +24,10 @@ const jouleverse = {
 // Wagmi config
 export const config = createConfig({
   chains: [jouleverse],
-  connectors: [metaMask()], // MetaMask
+  // 通用 injected connector：识别任何注入的 EIP-1193 provider
+  // （MetaMask 扩展、MetaMask/欧易 App 内置浏览器的 window.ethereum 等），
+  // 不锁定 io.metamask rdns，不依赖 @metamask/connect-evm SDK。
+  connectors: [injected()],
   transports: {
     [jouleverse.id]: http('https://rpc.jnsdao.com:8503'),
   },
@@ -115,10 +118,13 @@ export const useWalletStore = defineStore('wallet', () => {
     try {
       const connector = config.connectors[0]
       if (!connector) {
-        throw new Error('MetaMask connector not found')
+        throw new Error('Wallet connector not found')
       }
 
-      const result = await connector.connect()
+      // 连接时携带 chainId：若钱包当前不在 Jouleverse 网络，
+      // injected connector 会自动 wallet_switchEthereumChain；
+      // 若网络未添加（错误码 4902），自动 wallet_addEthereumChain 兜底。
+      const result = await connector.connect({ chainId: jouleverse.id })
       if (result && result.accounts && result.accounts.length > 0) {
         address.value = result.accounts[0]
         isConnected.value = true
