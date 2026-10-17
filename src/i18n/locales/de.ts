@@ -21,6 +21,8 @@ const de: I18nDict = {
   retry: 'Erneut versuchen',
   emptyTitle: 'Keine Domains gefunden',
   emptyDesc: 'Bitte ein anderes Stichwort oder einen anderen Buchstabenfilter versuchen',
+  noDomainsTitle: 'Noch keine Domains',
+  noDomainsDesc: 'Auf Jouleverse wurden noch keine .j-Domains registriert',
   progressHint: '{loaded} von {total} Domains geladen',
   boundTag: 'Gebunden',
   unboundTag: 'Ungebunden',

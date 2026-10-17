@@ -77,7 +77,15 @@
       @action="refresh"
     />
 
-    <!-- 空态 -->
+    <!-- 空注册表：链上尚无任何域名（区别于「搜索无结果」） -->
+    <JvPageState
+      v-else-if="totalSupply === 0"
+      type="empty"
+      :title="t('noDomainsTitle')"
+      :description="t('noDomainsDesc')"
+    />
+
+    <!-- 搜索/筛选无结果 -->
     <JvPageState
       v-else-if="filteredDomains.length === 0"
       type="search-empty"
@@ -168,7 +176,7 @@ const onLangChange = (e: Event) => {
 const refresh = () => { loadFirstPage() }
 
 const goDetail = (name: string) => {
-  router.push(`/jns/${name}`)
+  router.push(`/jns/${encodeURIComponent(name)}`)
 }
 
 onMounted(() => {

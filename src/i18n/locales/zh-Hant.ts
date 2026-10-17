@@ -21,6 +21,8 @@ const zhHant: I18nDict = {
   retry: '重試',
   emptyTitle: '未找到域名',
   emptyDesc: '請嘗試其他關鍵字或字母篩選',
+  noDomainsTitle: '暫無域名',
+  noDomainsDesc: 'Jouleverse 鏈上還沒有註冊任何 .j 域名',
   progressHint: '已載入 {loaded} / {total} 個域名',
   boundTag: '已綁定',
   unboundTag: '未綁定',

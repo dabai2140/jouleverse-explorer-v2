@@ -21,6 +21,8 @@ const ja: I18nDict = {
   retry: '再試行',
   emptyTitle: 'ドメインが見つかりません',
   emptyDesc: '別のキーワードまたは文字フィルターをお試しください',
+  noDomainsTitle: 'ドメインはまだありません',
+  noDomainsDesc: 'Jouleverse にはまだ .j ドメインが登録されていません',
   progressHint: '全 {total} 個中 {loaded} 個のドメインを読み込み済み',
   boundTag: 'バインド済み',
   unboundTag: '未バインド',

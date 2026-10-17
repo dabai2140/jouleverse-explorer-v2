@@ -21,6 +21,8 @@ const ko: I18nDict = {
   retry: '다시 시도',
   emptyTitle: '도메인을 찾을 수 없습니다',
   emptyDesc: '다른 키워드나 문자 필터를 시도해 보세요',
+  noDomainsTitle: '아직 도메인이 없습니다',
+  noDomainsDesc: 'Jouleverse에 아직 등록된 .j 도메인이 없습니다',
   progressHint: '전체 {total}개 중 {loaded}개 로드됨',
   boundTag: '바인딩됨',
   unboundTag: '미바인딩',

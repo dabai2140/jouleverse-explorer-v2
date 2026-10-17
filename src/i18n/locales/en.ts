@@ -22,6 +22,8 @@ const en = {
   retry: 'Retry',
   emptyTitle: 'No domains found',
   emptyDesc: 'Try another keyword or letter filter',
+  noDomainsTitle: 'No domains yet',
+  noDomainsDesc: 'No .j domains have been registered on Jouleverse yet',
   progressHint: '{loaded} of {total} domains loaded',
   boundTag: 'Bound',
   unboundTag: 'Unbound',

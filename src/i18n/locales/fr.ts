@@ -21,6 +21,8 @@ const fr: I18nDict = {
   retry: 'Réessayer',
   emptyTitle: 'Aucun domaine trouvé',
   emptyDesc: 'Essayez un autre mot-clé ou un autre filtre de lettre',
+  noDomainsTitle: 'Aucun domaine pour l’instant',
+  noDomainsDesc: 'Aucun domaine .j n’a encore été enregistré sur Jouleverse',
   progressHint: '{loaded} domaines chargés sur {total}',
   boundTag: 'Lié',
   unboundTag: 'Non lié',
