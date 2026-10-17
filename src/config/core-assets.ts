@@ -28,6 +28,8 @@ export interface CoreAsset {
   icon: string
   /** ERC20 精度（native/erc721 无意义） */
   decimals?: number
+  /** 可枚举 NFT：支持 tokenOfOwnerByIndex 二级懒加载（展开才枚举） */
+  enumerable?: boolean
 }
 
 export const CORE_ASSETS: CoreAsset[] = [
@@ -63,6 +65,7 @@ export const CORE_ASSETS: CoreAsset[] = [
     symbol: 'POP',
     kind: 'erc721',
     address: '0xCb1429da13cE40e75519148e796C6D58dD6b1a8E',
+    enumerable: true,
     icon: iconPopbadge,
   },
   {
@@ -79,6 +82,7 @@ export const CORE_ASSETS: CoreAsset[] = [
     symbol: 'JTI',
     kind: 'erc721',
     address: '0x826971d988d7d86Fdc9062A3f63E7b18D32Bc8EB',
+    enumerable: true,
     icon: iconJti,
   },
   {
@@ -87,6 +91,7 @@ export const CORE_ASSETS: CoreAsset[] = [
     symbol: 'JNSVote',
     kind: 'erc721',
     address: '0xEf1f38e95dd7F4FB564535F9317ecB3Bd419DA50',
+    enumerable: true,
     icon: iconJnsvote,
   },
 ] as const

@@ -23,7 +23,7 @@
           :key="item.asset.key"
         >
           <div class="asset-row">
-            <img :src="item.asset.icon" :alt="item.asset.name" class="asset-icon" />
+            <span class="asset-icon" :style="iconStyle(item.asset.icon)" role="img" :aria-label="item.asset.name"></span>
             <div class="asset-main">
               <span class="asset-name">{{ item.asset.name }}</span>
               <span class="asset-symbol muted">{{ item.asset.symbol }}</span>
@@ -62,7 +62,7 @@
               <button class="btn-load-more" @click="nftEnumLoadMore">重试</button>
             </div>
             <div v-else class="nft-enum-list">
-              <div v-for="it in nftEnumItems" :key="it.tokenId" class="nft-enum-item">
+              <div v-for="(it, index) in nftEnumItems" :key="`${it.tokenId}-${index}`" class="nft-enum-item">
                 <img v-if="it.image" :src="it.image" :alt="it.name" class="nft-enum-img" loading="lazy" />
                 <div v-else class="nft-enum-img nft-enum-fallback">🖼️</div>
                 <span class="nft-enum-name" :title="it.name">{{ it.name }}</span>
@@ -110,9 +110,8 @@ import { useRouter } from 'vue-router'
 import { fetchJnsHoldingBatch } from '../utils/jns-holdings'
 import { useCoreAssets } from '../composables/useCoreAssets'
 import { useNftEnumeration } from '../composables/useNftEnumeration'
-import { POPBADGE_ADDRESS } from '../contracts/popbadge'
-import { JNSVOTE_ADDRESS, JTI_ADDRESS } from '../contracts/jnsvote'
 import { JvLoading, JvPageState, JvAmount } from '../design-system'
+import { CORE_ASSETS } from '../config/core-assets'
 import type { CoreAsset } from '../config/core-assets'
 
 interface Props { address: string }
@@ -133,6 +132,15 @@ watch(balances, () => {
 })
 
 const isFungible = (a: CoreAsset) => a.kind === 'native' || a.kind === 'erc20'
+
+// 资产图标改用 CSS mask 渲染（7 个 SVG 均为单色，fill/stroke 全用 currentColor）：
+// mask 取 SVG 的 alpha 通道（轮廓），与内部颜色无关；真正的颜色由宿主 background: currentColor 决定，
+// 因此暗/亮色自动跟随 var(--jv-text-primary)，且 SVG 源文件无需任何改动。
+// 内联 style 绑定避免 CSS url() 的路径解析问题，需同时给 mask-image 与 -webkit-mask-image（Safari 前缀）。
+const iconStyle = (icon: string) => ({
+  maskImage: `url(${icon})`,
+  WebkitMaskImage: `url(${icon})`,
+})
 
 // 空态判定：加载完成、无错误、且所有资产余额均为 0n 时才算「暂无资产」。
 // 任何一项 value === null（读取失败）都不算空，避免把「读失败」误判为「零资产」
@@ -199,7 +207,7 @@ const loadJns = async () => {
   }
 }
 
-const goJnsDetail = (name: string) => router.push(`/jns/${name}`)
+const goJnsDetail = (name: string) => router.push(`/jns/${encodeURIComponent(name)}`)
 
 const loadMoreJns = async () => {
   if (loadingJns.value) return
@@ -223,13 +231,14 @@ const loadMoreJns = async () => {
 
 // ── NFT 枚举（二级懒加载：POPBadge / JNSVote / JTI）──
 // 首屏只显示「共持有 N 个」，点击「展开」后才枚举该类前 10 个，首屏 RPC 不变。
-const NFT_ENUM_CONFIG: Record<string, `0x${string}`> = {
-  popbadge: POPBADGE_ADDRESS,
-  jnsvote: JNSVOTE_ADDRESS,
-  jti: JTI_ADDRESS,
-}
+// 可枚举性由 core-assets.ts 的 enumerable 标志驱动（单一地址源，避免与 NFT_ENUM_CONFIG 双份重复）。
+const isEnumerableNft = (key: string) => CORE_ASSETS.some((a) => a.key === key && a.enumerable)
 
-const isEnumerableNft = (key: string) => key in NFT_ENUM_CONFIG
+// 展开类的枚举合约地址：从 core-assets 配置读 address，找不到（理论不达）回退零地址
+const enumerableAddress = (key: string | null): `0x${string}` => {
+  const a = key ? CORE_ASSETS.find((x) => x.key === key && x.enumerable) : undefined
+  return (a?.address as `0x${string}` | undefined) ?? ('0x0000000000000000000000000000000000000000' as `0x${string}`)
+}
 
 // 当前展开的 NFT key（同一时刻只展开一类）
 const expandedKey = ref<string | null>(null)
@@ -250,7 +259,7 @@ const {
   loadMore: nftEnumLoadMore,
   reset: nftEnumReset,
 } = useNftEnumeration(
-  () => (expandedKey.value ? NFT_ENUM_CONFIG[expandedKey.value] : ('0x0000000000000000000000000000000000000000' as `0x${string}`)),
+  () => enumerableAddress(expandedKey.value),
   () => props.address,
   () => enumTotalCount.value,
 )
@@ -293,7 +302,20 @@ watch(() => props.address, async () => {
   border-radius: var(--jv-radius-md);
 }
 
-.asset-icon { width: 1.4rem; height: 1.4rem; flex-shrink: 0; color: var(--jv-text-primary); }
+.asset-icon {
+  display: inline-block;
+  width: 1.4rem;
+  height: 1.4rem;
+  flex-shrink: 0;
+  color: var(--jv-text-primary);
+  background: currentColor;
+  -webkit-mask-size: contain;
+  -webkit-mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+  mask-size: contain;
+  mask-position: center;
+  mask-repeat: no-repeat;
+}
 
 .asset-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
 
