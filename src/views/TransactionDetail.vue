@@ -25,7 +25,7 @@
           </div>
           <div class="info-item">
             <span class="label">时间戳</span>
-            <span class="value">{{ formatTimestamp(transaction.blockTimestamp) }}</span>
+            <span class="value">{{ formatTimestamp(transaction.blockTimestamp) }} <span class="muted">(UTC) · {{ formatAge(transaction.blockTimestamp) }}</span></span>
           </div>
           <div class="info-item">
             <span class="label">发送方</span>
@@ -53,12 +53,28 @@
             <span class="value">{{ formatNumber(transaction.gasUsed || 0) }}</span>
           </div>
           <div class="info-item">
+            <span class="label">交易手续费</span>
+            <JvAmount v-if="txFee !== null" :value="txFee" unit="J" :maxDecimals="6" />
+            <span v-else class="muted">—</span>
+          </div>
+          <div class="info-item">
             <span class="label">随机数</span>
             <span class="value">{{ transaction.nonce }}</span>
           </div>
           <div class="info-item">
             <span class="label">输入数据</span>
-            <span class="value mono">{{ formatInput(transaction.input) }}</span>
+            <div class="value mono input-value">
+              <span v-if="!transaction.input || transaction.input === '0x'" class="muted">无</span>
+              <template v-else>
+                <span class="input-text">{{ inputExpanded ? transaction.input : formatInput(transaction.input) }}</span>
+                <span class="input-actions">
+                  <button v-if="transaction.input.length > 50" class="input-btn" @click="inputExpanded = !inputExpanded">
+                    {{ inputExpanded ? '收起' : '展开' }}
+                  </button>
+                  <button class="input-btn" @click="copyInput">{{ inputCopied ? '已复制' : '复制' }}</button>
+                </span>
+              </template>
+            </div>
           </div>
         </div>
       </div>
@@ -77,9 +93,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { publicClient } from '../config/client'
-import { formatNumber } from '../utils/format'
+import { formatNumber, formatAge } from '../utils/format'
 import { JvHashText, JvStatusTag, JvAmount, JvPageState } from '../design-system'
 
 interface Props {
@@ -91,20 +107,45 @@ const props = defineProps<Props>()
 const transaction = ref<any>(null)
 const loading = ref(true)
 const txHash = ref(props.hash)
+const inputExpanded = ref(false)
+const inputCopied = ref(false)
 
 const formatTimestamp = (timestamp: bigint): string => {
   const date = new Date(Number(timestamp) * 1000)
   return date.toLocaleString('zh-CN', {
     year: 'numeric', month: '2-digit', day: '2-digit',
     hour: '2-digit', minute: '2-digit', second: '2-digit',
+    hour12: false, timeZone: 'UTC',
   })
 }
 
+// 交易手续费 = gasUsed × effectiveGasPrice（本链 Clique/PoA 非 1559，effectiveGasPrice 为 null 时回退 gasPrice）
+const txFee = computed<bigint | null>(() => {
+  const t = transaction.value
+  if (!t) return null
+  const gasUsed = t.gasUsed ?? null
+  const price = t.effectiveGasPrice ?? t.gasPrice ?? null
+  if (gasUsed == null || price == null) return null
+  const gasUsedBig = typeof gasUsed === 'bigint' ? gasUsed : BigInt(gasUsed)
+  const priceBig = typeof price === 'bigint' ? price : BigInt(price)
+  return gasUsedBig * priceBig
+})
 
 const formatInput = (input: string): string => {
   if (!input || input === '0x') return '无'
   if (input.length <= 50) return input
   return `${input.substring(0, 50)}...`
+}
+
+const copyInput = async () => {
+  if (!transaction.value?.input) return
+  try {
+    await navigator.clipboard.writeText(transaction.value.input)
+    inputCopied.value = true
+    setTimeout(() => { inputCopied.value = false }, 1500)
+  } catch {
+    // 剪贴板不可用，静默失败
+  }
 }
 
 const loadTransaction = async () => {
@@ -194,6 +235,35 @@ onMounted(() => { loadTransaction() })
   font-family: var(--jv-font-mono);
   color: var(--jv-text-secondary);
 }
+
+.muted { color: var(--jv-text-muted); font-size: 0.82rem; }
+
+.input-value {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.input-text {
+  font-family: var(--jv-font-mono);
+  word-break: break-all;
+  text-align: right;
+}
+
+.input-actions { display: flex; gap: 8px; }
+
+.input-btn {
+  background: none;
+  border: 1px solid var(--jv-border);
+  color: var(--jv-text-secondary);
+  padding: 2px 8px;
+  border-radius: var(--jv-radius-sm);
+  cursor: pointer;
+  font-size: 0.78rem;
+  transition: border-color var(--jv-duration-fast) var(--jv-ease), color var(--jv-duration-fast) var(--jv-ease);
+}
+.input-btn:hover { border-color: var(--jv-brand); color: var(--jv-brand); }
 
 .error-section {
   background: var(--jv-bg-surface);
