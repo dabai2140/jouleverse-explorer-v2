@@ -25,7 +25,7 @@
           </div>
           <div class="info-item">
             <span class="label">时间戳</span>
-            <span class="value">{{ formatTimestamp(block.timestamp) }}</span>
+            <span class="value">{{ formatTimestamp(block.timestamp) }} <span class="muted">(UTC) · {{ formatAge(block.timestamp) }}</span></span>
           </div>
           <div class="info-item">
             <span class="label">矿工</span>
@@ -136,7 +136,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { publicClient } from '../config/client'
-import { formatNumber } from '../utils/format'
+import { formatNumber, formatAge } from '../utils/format'
 import { toolboxContracts } from '../contracts/toolbox'
 import { JvHashText, JvAmount, JvPageState } from '../design-system'
 
@@ -171,6 +171,7 @@ const formatTimestamp = (timestamp: bigint): string => {
   return date.toLocaleString('zh-CN', {
     year: 'numeric', month: '2-digit', day: '2-digit',
     hour: '2-digit', minute: '2-digit', second: '2-digit',
+    hour12: false, timeZone: 'UTC',
   })
 }
 
@@ -332,6 +333,8 @@ onMounted(() => { loadBlock() })
   color: var(--jv-text-muted);
   font-size: 0.78rem;
 }
+
+.muted { color: var(--jv-text-muted); font-size: 0.82rem; }
 
 .empty-section, .error-section {
   background: var(--jv-bg-surface);
