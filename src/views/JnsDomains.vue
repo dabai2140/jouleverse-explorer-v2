@@ -6,6 +6,7 @@
       <div class="title-row">
         <h1>🌐 {{ t('title') }}</h1>
         <select
+          v-if="showLangSwitch"
           class="lang-select"
           :value="lang"
           :aria-label="t('langLabel')"
@@ -134,7 +135,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useJnsDomains } from '@/composables/useJnsDomains'
-import { lang, setLang, t, LANGS } from '@/i18n'
+import { lang, setLang, t, LANGS, availableLocales } from '@/i18n'
 import { JvActionButton, JvHashText, JvPageState, JvLoading } from '../design-system'
 
 const router = useRouter()
@@ -169,6 +170,9 @@ const filteredDomains = computed(() => {
 })
 
 // ===== 操作 =====
+// 语言切换器：仅当可用语种 > 1 时显示（当前仅中文，隐藏；未来加语种文件自动出现）
+const showLangSwitch = availableLocales.length > 1
+
 const onLangChange = (e: Event) => {
   setLang((e.target as HTMLSelectElement).value as typeof lang.value)
 }

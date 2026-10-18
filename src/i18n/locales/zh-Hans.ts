@@ -1,7 +1,7 @@
-import type { I18nDict } from './en'
-
-// 简体中文
-const zhHans: I18nDict = {
+// 简体中文 —— 唯一语种，同时是 i18n 键来源（I18nDict = typeof zhHans）。
+// 新增语种：新建对应 locale 文件，import type { I18nDict } from './zh-Hans'，
+// 并在 src/i18n/index.ts 的 Lang / LANGS / DICTS 中登记。
+const zhHans = {
   backToHome: '← 返回首页',
   title: 'JNS 域名总览',
   subtitle: '浏览 Jouleverse 链上全部 .j 域名',
@@ -35,3 +35,4 @@ const zhHans: I18nDict = {
 }
 
 export default zhHans
+export type I18nDict = typeof zhHans
