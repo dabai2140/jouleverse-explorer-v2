@@ -229,6 +229,9 @@ export function useJnsDomains() {
   // 首屏（兼作刷新/重试）：重置后加载最新一页
   // force=true 时绕过缓存直达链上（手动刷新）；默认 false 走缓存 SWR
   async function loadFirstPage(force = false) {
+    // 作废在途 silentRefresh：force 是用户显式的最新意图，
+    // 不允许更早发起的后台刷新用旧快照覆盖它
+    if (force) ++refreshSeq
     // 缓存命中：先渲染缓存内容，再按需后台静默刷新（stale-while-revalidate）
     const cached = force ? null : readCache()
     if (cached && cached.domains.length > 0) {
