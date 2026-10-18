@@ -37,3 +37,6 @@ wallet.json
 .secret
 mnemonic.txt
 accounts.json
+
+# TypeScript build cache
+tsconfig.tsbuildinfo
