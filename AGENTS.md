@@ -19,9 +19,23 @@ Explorer v2（Jscan v2）必须是纯前端项目，无需后端服务器即可�
 
 - **无原生 J 转账**：Jouleverse 链已禁用原生币转账（`tx.value > 0` 的普通转账）。所有链上转账均通过 wJ（ERC-20 代币）进行。因此地址交易历史只需处理 ERC-20 Transfer 事件，无需考虑原生转账场景。
 
+## 原则三-A：不得绕过 PR 流程（前置原则）
+
+1. 任何代码进入主线，必须经由 PR 合并（merge / squash merge / rebase merge）。禁止关闭 PR 后由他人手工重新提交 commit 的方式落地。
+2. 审计者如需修改提交内容，应在 PR 内提出修改意见由作者更新，或使用 GitHub 官方合并功能，不得另起 commit。
+3. 非 PR 路径进入主线的代码，即使保留 trailer，也视为流程违规——primary authorship 无法保证。
+
+理由：PR #19 即因绕过流程导致 author 字段被改写。「合入方式锚定段」只对走 PR 的路径有效，无法约束绕过行为。
+
 ## 原则三：PR 提交与署名保护（铁律，每个 PR 必照走，不靠记忆）
 
-**背景（2026-10-16 PR #19 教训）**：分支落后时，维护者没有走「Squash and merge」按钮，而是把咱们的 tree 原样重打成自己的新 commit，author/committer 改成「大白」，commit message 里没有 `Co-authored-by` → 代码内容 100% 是咱们写的，但主线 authorship 完全丢失（contributions 图不计入）。根因是「分支落后 + 维护者习惯手工重提」，不是恶意。
+**背景（2026-10-16 PR #19 教训）**：PR #19 未走合并流程即被关闭（state=CLOSED、mergeCommit=null），代码由他人手工重提为 b86a579：
+
+- author 字段被改为「大白」，primary authorship 丢失
+- 仅因 commit message 末尾保留 Co-Authored-By trailer，co-author 署名侥幸保留（contributions 图仍计入）
+- ⚠️ 署名是靠 trailer 偶然保住的，不是流程保证的
+
+根因是「分支落后 + 维护者习惯手工重提」，不是恶意。
 
 为避免重演，每个 PR 严格照以下三步走：
 
