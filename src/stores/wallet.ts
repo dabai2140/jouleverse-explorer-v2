@@ -3,6 +3,10 @@ import { ref } from 'vue'
 import { createConfig, http } from 'wagmi'
 import { injected } from 'wagmi/connectors'
 import { getPublicClient, reconnect } from '@wagmi/core'
+import { createDiscreteApi } from 'naive-ui'
+
+// 组件外弹 message（连接错误等需要在 store 层提示用户的场景）
+const { message } = createDiscreteApi(['message'])
 
 // Jouleverse chain config
 const jouleverse = {
@@ -94,7 +98,19 @@ export const useWalletStore = defineStore('wallet', () => {
         // 5s 内 provider 未就绪（如未安装钱包扩展），保持未连接状态
         return
       }
-      const result = await reconnect(config)
+      let result = await reconnect(config)
+      // 迁移兼容：老用户此前用 metaMask() 连过，storage 里没有 injected.connected 标记，
+      // injected() 的 isAuthorized() 会判 false → reconnect 拿不到连接，UI 靠
+      // checkConnection 兜底显示「已连接」，但 wagmi 内部 state.current 仍为空，
+      // 后续 writeContract 会抛 ConnectorNotConnectedError（投票 / WJ 转账 / 签到全失效）。
+      // 若探测到钱包侧仍授权，补写标记再 reconnect 一次（全程静默，不弹授权窗）。
+      if (!result[0]) {
+        const probed = await config.connectors[0]?.getAccounts().catch(() => [])
+        if (probed && probed.length > 0) {
+          await config.storage?.setItem('injected.connected', true)
+          result = await reconnect(config)
+        }
+      }
       const conn = result[0]
       if (conn) {
         address.value = conn.accounts[0]
@@ -125,6 +141,14 @@ export const useWalletStore = defineStore('wallet', () => {
       // injected connector 会自动 wallet_switchEthereumChain；
       // 若网络未添加（错误码 4902），自动 wallet_addEthereumChain 兜底。
       const result = await connector.connect({ chainId: jouleverse.id })
+      // chainId 校验：wallet_switchEthereumChain 返回非 4001 错误时，injected connector
+      // 的 catch 会静默吞掉并返回旧 chainId（上游 injected.js:126-129），连接照样成功、
+      // UI 显示已连接，但钱包仍停在错误链上，写操作（WJ 转账 / JNSVote 投票）会在错误网络签名。
+      // 这里兜底校验，不一致则明确提示用户切换，不静默吞掉。
+      if (result && result.chainId !== jouleverse.id) {
+        message.error('请在钱包中切换到 Jouleverse 网络')
+        throw new Error(`连接到了错误的网络 (chainId=${result.chainId})，请切换到 Jouleverse`)
+      }
       if (result && result.accounts && result.accounts.length > 0) {
         address.value = result.accounts[0]
         isConnected.value = true
