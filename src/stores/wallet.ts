@@ -147,6 +147,11 @@ export const useWalletStore = defineStore('wallet', () => {
       // 这里兜底校验，不一致则明确提示用户切换，不静默吞掉。
       if (result && result.chainId !== jouleverse.id) {
         message.error('请在钱包中切换到 Jouleverse 网络')
+        // 状态一致性：connector.connect() 已返回账户并写入 injected.connected 标记，
+        // 但上游静默吞掉 switch 错误、钱包仍停在错误链上。若不清理，刷新页面后
+        // restoreConnection 会因残留标记误判已连接（在错误链上显示已连接）。
+        // disconnect() 移除该标记并置 disconnected，下次 connect() 会自动清除。
+        await connector.disconnect().catch(() => {})
         throw new Error(`连接到了错误的网络 (chainId=${result.chainId})，请切换到 Jouleverse`)
       }
       if (result && result.accounts && result.accounts.length > 0) {
@@ -159,6 +164,8 @@ export const useWalletStore = defineStore('wallet', () => {
       console.error('Failed to connect wallet:', error)
       isConnected.value = false
       address.value = null
+      balance.value = null
+      wjBalance.value = null
       throw error
     } finally {
       isConnecting.value = false
