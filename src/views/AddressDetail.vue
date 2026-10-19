@@ -163,7 +163,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { formatEther } from 'viem'
 import { formatAddress } from '../utils/format'
@@ -197,6 +197,7 @@ function initAddress(raw: string) {
   hexAddress.value = hex
   const encoded = encodeJVA(hex)
   if (encoded.success) { b32Address.value = encoded.b32Address; fullAddress.value = encoded.fullAddress }
+  error.value = null
   return true
 }
 
@@ -443,9 +444,32 @@ const nextYear = () => {
 
 onMounted(() => {
   if (error.value) return
+  reloadAddressData()
+})
+
+// 同组件路由切换（地址页内点合约地址 / 区块页 miner / 交易页 from-to 跳转）时，
+// props.address 变化但组件实例复用，setup 只跑一次 → 必须 watch 重建数据。
+watch(() => props.address, (v) => {
+  if (initAddress(v) === false) return
+  reloadAddressData()
+})
+
+function reloadAddressData() {
+  jnsName.value = null
+  jnsTotal.value = 0
+  jnsNames.value = []
+  jnsLoaded.value = 0
+  balance.value = null
+  wjBalance.value = null
+  transactions.value = []
+  totalTxs.value = 0
+  currentYear.value = new Date().getFullYear()
+  availableYears.value = []
+  txLogsLoaded.value = false
+  txLoadError.value = false
   loadBalance(); loadWJBalance(); loadJnsName(); loadJnsHoldings()
   loadTransactions(currentYear.value)
-})
+}
 </script>
 
 <style scoped>
