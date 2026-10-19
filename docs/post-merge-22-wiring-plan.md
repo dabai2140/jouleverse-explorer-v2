@@ -45,7 +45,7 @@
 
 ## （二）i18n 迁移清单（PR #23 内的中文硬编码）
 
-> 背景：7 语种 i18n 基建只在 PR #22（feat/jns-domains-overview）分支，尚未合并进 explorer-v2。因此 PR #23（feat/asset-center-m1）的中文文案目前是硬编码 + `TODO(i18n)` 标注，待 #22 合并后统一迁移。
+> 背景：i18n 基建只在 PR #22（feat/jns-domains-overview）分支，尚未合并进 explorer-v2，且 #22 已收敛为**中文单一语种（zh-Hans）**。因此 PR #23（feat/asset-center-m1）的中文文案目前是硬编码 + `TODO(i18n)` 标注，待 #22 合并后统一迁移到 `t()`。
 
 文件：`src/components/CoreAssetsPanel.vue`（含新增的 NFT 枚举文案）。
 
@@ -70,7 +70,7 @@
 - `(读取失败)` → 建议 key `enumReadFailed`
 - `（元数据读取失败）` → 建议 key `enumMetadataFailed`
 
-**注意**：上述 key 需 **7 语种同步补齐**（en / zh-Hans / zh-Hant / ja / ko / de / fr），沿用 #22 的 `en.ts` 为键来源 + `I18nDict = typeof en` 编译校验模式。
+**注意**：上述 key 需登记进 **zh-Hans 单一语种字典**，沿用 #22 的 `locales/zh-Hans.ts` 为键来源 + `I18nDict = typeof zhHans` 编译校验模式（漏键/多键即编译失败）。未来若新增语种，再按 #22 的 `Lang` / `LANGS` / `DICTS` 登记机制补齐，语言切换器会在「语种数 > 1」时自动显示。
 
 ---
 
