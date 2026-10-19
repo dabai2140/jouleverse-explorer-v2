@@ -122,7 +122,7 @@
 import { computed, ref } from 'vue'
 import { getPublicClient } from '@wagmi/core'
 import { writeContract, waitForTransactionReceipt } from 'wagmi/actions'
-import { WaitForTransactionReceiptTimeoutError } from 'viem'
+import { WaitForTransactionReceiptTimeoutError, hexToString } from 'viem'
 import type { TransactionReceipt } from 'viem'
 import { config, useWalletStore } from '../stores/wallet'
 import JvHashText from '../design-system/components/JvHashText.vue'
@@ -184,7 +184,7 @@ function decodeRevertReason(data: string): string {
       const offset = parseInt(body.slice(0, 64), 16) * 2
       const len = parseInt(body.slice(offset + 64, offset + 128), 16)
       const content = body.slice(offset + 128, offset + 128 + len * 2)
-      return Buffer.from(content, 'hex').toString('utf8')
+      return hexToString(`0x${content}`)
     }
     if (data.startsWith('0x4e487b71')) {
       // Panic(uint256) — 编译器内建错误
