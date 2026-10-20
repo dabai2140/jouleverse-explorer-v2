@@ -10,7 +10,8 @@
     "test": "vitest run",
     "smoke": "node scripts/smoke-jnsvote.mjs",
     "smoke:jns": "node scripts/smoke-jns-domains.mjs",
-    "smoke:core-assets": "node scripts/smoke-core-assets.mjs"
+    "smoke:core-assets": "node scripts/smoke-core-assets.mjs",
+    "test:jvaddress": "node --test tests/jvaddress.test.ts"
   },
   "dependencies": {
     "@wagmi/connectors": "^8.0.0",
