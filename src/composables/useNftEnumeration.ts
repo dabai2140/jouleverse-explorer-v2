@@ -7,6 +7,7 @@
 import { ref, toValue, onScopeDispose, type MaybeRefOrGetter } from 'vue'
 import { publicClient } from '../config/client'
 import { safeErrorMessage } from '../utils/error'
+import { t } from '../i18n'
 
 export interface NftItem {
   tokenId: number
@@ -122,9 +123,9 @@ export function useNftEnumeration(
 
       // 失败显式区分：tokenId 读失败 vs 元数据读失败，绝不用 0/空名掩盖
       const newItems: NftItem[] = tokenIds.map((tid, i) => {
-        if (tid < 0) return { tokenId: -1, name: '(读取失败)', image: null }
+        if (tid < 0) return { tokenId: -1, name: t('enumReadFailed'), image: null }
         const uri = uriByIndex.get(i)
-        if (uri === undefined || uri === '') return { tokenId: tid, name: `#${tid}（元数据读取失败）`, image: null }
+        if (uri === undefined || uri === '') return { tokenId: tid, name: `#${tid}${t('enumMetadataFailed')}`, image: null }
         return parseMetadata(tid, uri)
       })
       items.value = [...items.value, ...newItems]
