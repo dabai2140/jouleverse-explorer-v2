@@ -155,7 +155,7 @@ const isEmpty = computed(() =>
 // TODO(i18n): 「万」「亿」为中文硬编码；待 PR #22 的 7 语种 i18n 合并进 explorer-v2 后统一迁移
 const formatCount = (n: bigint): string => {
   let v: number
-  try { v = Number(BigInt(n)) } catch { return '0' }
+  try { v = Number(BigInt(n)) } catch { return '—' }
   if (v >= 1e8) return `${(v / 1e8).toFixed(1).replace(/\.0$/, '')}亿`
   if (v >= 1e4) return `${(v / 1e4).toFixed(1).replace(/\.0$/, '')}万`
   return String(v)
@@ -234,10 +234,13 @@ const loadMoreJns = async () => {
 // 可枚举性由 core-assets.ts 的 enumerable 标志驱动（单一地址源，避免与 NFT_ENUM_CONFIG 双份重复）。
 const isEnumerableNft = (key: string) => CORE_ASSETS.some((a) => a.key === key && a.enumerable)
 
-// 展开类的枚举合约地址：从 core-assets 配置读 address，找不到（理论不达）回退零地址
+// 展开类的枚举合约地址：从 core-assets 配置读 address，找不到（理论不达）抛错显式失败，
+// 不静默兜底零地址（与仓库「失败必须显式」原则一致，useNftEnumeration 会捕获并置 error 态）
 const enumerableAddress = (key: string | null): `0x${string}` => {
   const a = key ? CORE_ASSETS.find((x) => x.key === key && x.enumerable) : undefined
-  return (a?.address as `0x${string}` | undefined) ?? ('0x0000000000000000000000000000000000000000' as `0x${string}`)
+  const addr = a?.address as `0x${string}` | undefined
+  if (!addr) throw new Error(`枚举合约地址缺失（key=${key}）`)
+  return addr
 }
 
 // 当前展开的 NFT key（同一时刻只展开一类）
