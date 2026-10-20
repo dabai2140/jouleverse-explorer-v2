@@ -163,19 +163,19 @@
         即将推出
       </h2>
       <div class="tools-grid">
-        <div class="tool-card is-disabled">
+        <router-link to="/jnsvote" class="tool-card">
           <div class="tool-card-header">
             <h3 class="tool-card-title">
               <span class="tool-icon">🗳️</span>
               JNSVote 治理投票
             </h3>
-            <span class="tool-status status-planned">规划中</span>
+            <span class="tool-status status-migrated">已迁移</span>
           </div>
           <p class="tool-desc">JNSVote 治理投票专属界面：资格验证、投票列表、投票操作（P3-1）</p>
           <div class="tool-card-footer">
-            <span class="tool-link muted">即将推出</span>
+            <span class="tool-link">进入 →</span>
           </div>
-        </div>
+        </router-link>
 
         <div class="tool-card is-disabled">
           <div class="tool-card-header">
