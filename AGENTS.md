@@ -48,9 +48,9 @@ Explorer v2（Jscan v2）必须是纯前端项目，无需后端服务器即可�
 ### 1. 提交前 checklist（逐项打勾，缺一不可）
 
 - [ ] `git fetch` 最新 upstream，分支 rebase 到最新基线；`git status` / `gh pr view` 确认 `behind=0`、`mergeable_state=clean`。**落后就必须先 rebase**，否则维护者只能手工重提（#19 的直接诱因）。
-- [ ] 单 commit + 规范 message（`type(scope): 描述`），减少合并噪音（多 commit/杂乱历史会诱导维护者手工 cherry-pick）。
+- [ ] 分支干净、message 规范（`type(scope): 描述`）。多 commit 亦可（官方合并同样保留署名），但请避免无关改动混入。
 - [ ] `git status` 工作区干净，无与任务无关改动。
-- [ ] `npm run build` 通过（`vue-tsc -b` + `vite build`）。
+- [ ] **`npm run build` 通过**（`vue-tsc -b` + `vite build`）。⚠️ **不要用 `vue-tsc --noEmit` 代替** —— 本仓库里它是假绿，见原则五。
 - [ ] 视觉改动完成双主题验证。
 - [ ] 核对署名：`git log -1 --format='%an <%ae>'` 应为 `fangsheng-sudo <fangsheng-sudo@users.noreply.github.com>`。
 
@@ -69,3 +69,43 @@ PR 正文末尾固定加这一段，不删改：
 - [ ] 若署名丢失，**当场**发一条友好 comment（不攒着，当场成本最低、对方压力最小）：「这条合入似乎没带上 `Co-authored-by` 署名，麻烦看下是否漏了？」
 
 **关键认知**：署名是否保留，只取决于「代码怎么进主线」（走官方合并 vs 手工重提），与点哪个按钮、单 commit 还是多 commit 无关。
+
+## 原则五：本地验证门禁 —— `vue-tsc --noEmit` 在本仓库是假绿
+
+**背景（2026-10-20 PR #42 教训）**：PR #42 提交时自测「vue-tsc / vite build 全绿」，实际 `npm run build` 直接失败：
+
+```
+src/router/index.ts(52,13): error TS7006: Parameter 'route' implicitly has an 'any' type.
+```
+
+### 根因：不带 `-p` 的 `vue-tsc --noEmit` 不检查任何文件
+
+根 `tsconfig.json` 是 project references 结构：
+
+```json
+{ "files": [], "references": [{ "path": "./tsconfig.app.json" }, { "path": "./tsconfig.node.json" }] }
+```
+
+`files: []` 且**没有 `include`**，所以不带 `-p` 跑 `vue-tsc --noEmit` 会编译 **0 个文件**、永远 exit 0 —— 这是假绿，不是通过。
+
+真正的类型检查配置在 `tsconfig.app.json`（`include: ["src/**/*.ts", "src/**/*.tsx", "src/**/*.vue"]` + `strict: true`），只有 `vue-tsc -b` 会按 references 走进去 —— 也就是 `npm run build` 实际执行的那条命令。
+
+同一 commit 三种跑法实测：
+
+| 命令 | 结果 |
+|---|---|
+| `vue-tsc --noEmit` | 0（**假绿**）|
+| `vue-tsc --noEmit -p tsconfig.app.json` | ❌ TS7006 |
+| `npm run build` | ❌ exit 2 |
+
+### 铁律
+
+1. **本地门禁一律用 `npm run build`**，不要用 `vue-tsc --noEmit`。
+2. **取退出码不要走管道**：`cmd | tail; echo $?` 拿到的是 `tail` 的状态，永远 0。改用 `cmd >log 2>&1; echo $?`，或 `${PIPESTATUS[0]}`。
+3. **`npm test` 必须通过**（vitest + `node --test` 两套），CI 的 `Test` 步骤会阻断部署。
+4. **合入 PR 后必须重新构建验证**：解决冲突/合并时以 PR 分支内容为准，可能覆盖本地修复，不能假定先前的修复还在。
+5. **推 upstream 后必须查 CI 结论**，不能只看本地通过 —— 本地是 macOS，CI 是 Linux，平台相关依赖（如 `@rolldown/binding-*`）行为不同。
+
+### 相关：lockfile 不要删了重建
+
+跨平台 native binding 项目（rolldown / esbuild / swc / lightningcss 等 `optionalDependencies`）**绝不在单一平台上删 `package-lock.json` 重建** —— npm 只记录当前平台的可选依赖，会导致 CI 缺目标平台二进制（2026-10-20 曾致 Pages 部署连挂两次）。正确做法是恢复原 lockfile 后 `npm install --package-lock-only` 增量更新。
