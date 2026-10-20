@@ -1,4 +1,4 @@
-import { createRouter, createWebHashHistory } from 'vue-router'
+import { createRouter, createWebHashHistory, type RouteLocationNormalized } from 'vue-router'
 import Blocks from '../views/Blocks.vue'
 import BlockDetail from '../views/BlockDetail.vue'
 import TransactionDetail from '../views/TransactionDetail.vue'
@@ -49,7 +49,7 @@ const routes = [
     path: '/jnsvote/:id',
     name: 'jnsvoteProposalDetail',
     component: JNSVoteProposalDetail,
-    props: (route) => ({ proposalId: Number(route.params.id) })
+    props: (route: RouteLocationNormalized) => ({ proposalId: Number(route.params.id) })
   },
   {
     path: '/blocks',

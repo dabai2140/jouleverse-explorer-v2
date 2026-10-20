@@ -32,6 +32,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # 测试门禁：单元测试（vitest + node:test），失败即阻断部署
+      - name: Test
+        run: npm test
+
       - name: Build
         run: npm run build
 
