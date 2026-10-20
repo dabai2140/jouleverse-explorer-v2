@@ -137,7 +137,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { formatEther } from 'viem'
 import { formatAddress } from '../utils/format'
@@ -171,6 +171,7 @@ function initAddress(raw: string) {
   hexAddress.value = hex
   const encoded = encodeJVA(hex)
   if (encoded.success) { b32Address.value = encoded.b32Address; fullAddress.value = encoded.fullAddress }
+  error.value = null
   return true
 }
 
@@ -179,6 +180,10 @@ const jnsName = ref<string | null>(null)
 // WJ 余额：由 CoreAssetsPanel 统一读取后通过 @wj-balance 事件回传，
 // 消除此处与 useCoreAssets 的重复 balanceOf 读取
 const wjBalance = ref<bigint | null>(null)
+
+// 世代号：地址切换时作废在途请求，避免「B 的地址 + A 的余额」这类过期响应回写。
+let loadSeq = 0
+const isStale = (seq: number) => seq !== loadSeq
 
 const TRANSFER_SIG = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef' as `0x${string}`
 
@@ -221,15 +226,19 @@ const formatBalance = (bal: bigint | null): string => {
 }
 
 
-const loadJnsName = async () => {
+const loadJnsName = async (seq = loadSeq) => {
   try {
     const name = await publicClient.readContract({ address: JNS_ADDRESS, abi: jnsABI, functionName: 'addr2name', args: [hexAddress.value as `0x${string}`] }) as string
+    if (isStale(seq)) return
     jnsName.value = name || null
-  } catch { jnsName.value = null }
+  } catch {
+    if (isStale(seq)) return
+    jnsName.value = null
+  }
 }
 
 /** 获取某年中与目标地址相关的代币转账日志 */
-const loadTransactions = async (year: number) => {
+const loadTransactions = async (year: number, seq = loadSeq) => {
   loadingTxs.value = true
   transactions.value = []
   txLogsLoaded.value = false
@@ -240,6 +249,7 @@ const loadTransactions = async (year: number) => {
     const latestBlock = await publicClient.getBlockNumber()
     const latestData = await publicClient.getBlock({ blockNumber: latestBlock })
     initTimeCache(latestBlock, Number(latestData.timestamp))
+    if (isStale(seq)) return
     availableYears.value = getAvailableYears(latestBlock)
 
     const { fromBlock, toBlock } = getYearBlockRange(year)
@@ -279,6 +289,7 @@ const loadTransactions = async (year: number) => {
         }],
       }).catch(() => [] as any[]),
     ])
+    if (isStale(seq)) return
     const outLogs: any[] = outResult
     const inLogs: any[] = inResult
 
@@ -304,6 +315,7 @@ const loadTransactions = async (year: number) => {
     // 用区块号差 × 平均出块时间 估算年龄（不需要 getBlock 逐块查时间戳）
     const avgSec = getAvgBlockTime()
 
+    if (isStale(seq)) return
     transactions.value = allLogs.map(log => {
       const fromAddr = ('0x' + (log.topics[1] as string).slice(26)) as string
       const toAddr = ('0x' + (log.topics[2] as string).slice(26)) as string
@@ -322,12 +334,13 @@ const loadTransactions = async (year: number) => {
     txLogsLoaded.value = true
     txLoadError.value = false
   } catch (e) {
+    if (isStale(seq)) return
     console.error('loadTransactions error:', e)
     transactions.value = []
     txLoadError.value = true
     totalTxs.value = 0
   } finally {
-    loadingTxs.value = false
+    if (!isStale(seq)) loadingTxs.value = false
   }
 }
 
@@ -361,9 +374,35 @@ const nextYear = () => {
 
 onMounted(() => {
   if (error.value) return
-  loadJnsName()
-  loadTransactions(currentYear.value)
+  reloadAddressData()
 })
+
+// 同组件路由切换（地址页内点合约地址 / 区块页 miner / 交易页 from-to 跳转）时，
+// props.address 变化但组件实例复用，setup 只跑一次 → 必须靠 watch 重建数据。
+watch(() => props.address, (v) => {
+  // 格式互切（HEX/B32/JVA 三行之间点击）指向同一底层地址时，只更新展示格式，
+  // 不重打整轮 RPC。!error.value 不可省：否则「无效地址 → 回到正确地址」会卡在错误页。
+  // 注意：B32/JVA 解码出来的 hex 是小写，hexAddress 保留用户输入的 checksum 大小写，
+  // 必须小写比较，否则格式互切永远判定为「地址变了」。
+  const nextHex = normalizeToHex(v)
+  if (!error.value && nextHex && nextHex.toLowerCase() === hexAddress.value.toLowerCase()) return
+  if (initAddress(v) === false) return
+  reloadAddressData()
+})
+
+function reloadAddressData() {
+  const seq = ++loadSeq
+  jnsName.value = null
+  wjBalance.value = null
+  transactions.value = []
+  totalTxs.value = 0
+  currentYear.value = new Date().getFullYear()
+  availableYears.value = []
+  txLogsLoaded.value = false
+  txLoadError.value = false
+  loadJnsName(seq)
+  loadTransactions(currentYear.value, seq)
+}
 </script>
 
 <style scoped>
