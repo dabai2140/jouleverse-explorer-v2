@@ -2,7 +2,7 @@
 // 依据 issue #21 铁律：余额类必须「收集 → 一次 multicall3」，严禁循环里逐个 await balanceOf
 // 结果按「J → ERC20 余额降序 → NFT 数量降序」排序
 
-import { ref, toValue, type MaybeRefOrGetter } from 'vue'
+import { ref, toValue, onScopeDispose, type MaybeRefOrGetter } from 'vue'
 import { isAddress } from 'viem'
 import { publicClient } from '../config/client'
 import { CORE_ASSETS, KIND_ORDER, type CoreAsset, type AssetKind } from '../config/core-assets'
@@ -49,6 +49,9 @@ export function useCoreAssets(address: MaybeRefOrGetter<string>) {
 
   // 竞态保护：每次 load 自增，结果回填前校验是否仍是本次请求
   let requestId = 0
+  // 卸载作废：组件销毁后在途响应一律丢弃，避免卸载后回写 state
+  let disposed = false
+  onScopeDispose(() => { disposed = true })
 
   const load = async () => {
     // 每次 load 都重新取当前地址（address 可能是 getter/ref/字符串），
@@ -97,14 +100,14 @@ export function useCoreAssets(address: MaybeRefOrGetter<string>) {
         value: byKey.get(asset.key) ?? null,
       }))
 
-      if (myReq !== requestId) return // 过期结果丢弃
+      if (myReq !== requestId || disposed) return // 过期/卸载结果丢弃
       balances.value = sortByRule(list)
     } catch (e) {
-      if (myReq !== requestId) return
+      if (myReq !== requestId || disposed) return
       console.error('[useCoreAssets] 加载失败:', e)
       error.value = e instanceof Error ? e.message : String(e)
     } finally {
-      if (myReq === requestId) isLoading.value = false
+      if (myReq === requestId && !disposed) isLoading.value = false
     }
   }
 
