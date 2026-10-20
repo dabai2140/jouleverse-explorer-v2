@@ -10,6 +10,7 @@ import ToolsHome from '../views/ToolsHome.vue'
 import ContractToolView from '../views/ContractToolView.vue'
 import MerkleProofGenerator from '../views/MerkleProofGenerator.vue'
 import JNSVote from '../views/JNSVote.vue'
+import JNSVoteProposalDetail from '../views/JNSVoteProposalDetail.vue'
 import JnsDomains from '../views/JnsDomains.vue'
 
 const routes = [
@@ -43,6 +44,12 @@ const routes = [
     path: '/jnsvote',
     name: 'jnsvote',
     component: JNSVote
+  },
+  {
+    path: '/jnsvote/:id',
+    name: 'jnsvoteProposalDetail',
+    component: JNSVoteProposalDetail,
+    props: (route) => ({ proposalId: Number(route.params.id) })
   },
   {
     path: '/blocks',
