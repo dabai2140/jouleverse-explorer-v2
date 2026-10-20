@@ -19,7 +19,7 @@
           :coreId="coreId"
           :metadata="metadata"
           :formatAddress="formatAddress"
-          @checkedIn="load"
+          @checkedIn="() => load(true)"
         />
       </template>
 
