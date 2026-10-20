@@ -9,6 +9,9 @@
     "preview": "vite preview",
     "smoke": "node scripts/smoke-jnsvote.mjs",
     "smoke:jns": "node scripts/smoke-jns-domains.mjs"
+,
+    "smoke:core-assets": "node scripts/smoke-core-assets.mjs"
+
   },
   "dependencies": {
     "@wagmi/connectors": "^8.0.0",
