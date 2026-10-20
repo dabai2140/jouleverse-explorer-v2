@@ -26,7 +26,7 @@ const defaultMeta: Record<PageStateType, { title: string; desc: string }> = {
   'empty':              { title: '暂无数据',         desc: '这里还没有内容' },
   'search-empty':       { title: '未找到结果',       desc: '请尝试其他关键词或检查输入是否正确' },
   'network-error':      { title: 'RPC 连接异常',     desc: '无法获取链上数据，请检查网络后重试' },
-  'wallet-disconnected':{ title: '钱包未连接',       desc: '请先连接 MetaMask 钱包以使用此功能' },
+  'wallet-disconnected':{ title: '钱包未连接',       desc: '请先连接钱包（MetaMask / 欧易等）以使用此功能' },
   'address-mismatch':   { title: '钱包地址不匹配',   desc: '当前连接的钱包与页面地址不一致，请切换账号' },
   'tx-failed':          { title: '交易失败',         desc: '链上执行失败，请检查参数后重试，或联系管理员' },
   'no-core-id':         { title: '未持有 Core ID',   desc: '该地址尚未 Mint Core ID NFT' },

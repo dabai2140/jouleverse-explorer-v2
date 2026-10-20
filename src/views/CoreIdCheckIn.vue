@@ -3,7 +3,7 @@
     <JvPageState
       v-if="!walletStore.isConnected"
       type="wallet-disconnected"
-      description="签到操作需要连接钱包，请先在右上角连接 MetaMask。"
+      description="签到操作需要连接钱包，请先在右上角连接钱包（MetaMask / 欧易等）。"
     />
 
     <div v-else-if="walletStore.address?.toLowerCase() !== address.toLowerCase()" class="checkin-block wallet-warning">
