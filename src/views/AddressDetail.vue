@@ -538,53 +538,6 @@ function reloadAddressData() {
 /* ── JNS name ── */
 .jns-name { font-weight: 600; color: var(--jv-brand); font-size: 1.05rem; }
 
-.jns-summary {
-  color: var(--jv-text-secondary);
-  margin: 0 0 12px 0;
-  font-size: 0.9rem;
-}
-
-.jns-list { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
-
-.jns-tag {
-  display: inline-block;
-  padding: 4px 12px;
-  border-radius: var(--jv-radius-full);
-  background: var(--jv-brand-subtle);
-  color: var(--jv-brand);
-  font-weight: 600;
-  font-size: 0.88rem;
-}
-
-.btn-load-more {
-  background: none;
-  border: 1px solid var(--jv-border);
-  color: var(--jv-text-secondary);
-  padding: 6px 16px;
-  border-radius: var(--jv-radius-md);
-  cursor: pointer;
-  font-size: 0.85rem;
-  transition: border-color var(--jv-duration-fast) var(--jv-ease),
-              color var(--jv-duration-fast) var(--jv-ease);
-}
-
-.btn-load-more:hover:not(:disabled) { border-color: var(--jv-brand); color: var(--jv-brand); }
-.btn-load-more:disabled { opacity: 0.5; cursor: not-allowed; }
-
-.jns-overflow-hint {
-  margin-top: 8px;
-  font-size: 0.85rem;
-  color: var(--jv-text-muted);
-}
-
-.jns-overflow-hint a {
-  color: var(--jv-link);
-  cursor: pointer;
-  text-decoration: none;
-}
-
-.jns-overflow-hint a:hover { text-decoration: underline; }
-
 /* ── Info note ── */
 .info-note {
   margin-top: 14px;
