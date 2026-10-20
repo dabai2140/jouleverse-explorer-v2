@@ -40,5 +40,6 @@ accounts.json
 
 # TypeScript build cache（防御性：当前 tsconfig.app.json / tsconfig.node.json 已把
 # tsBuildInfoFile 指向 ./node_modules/.tmp/…，本不会生成在根目录；此条仅防止将来
-# 有人改动配置后污染工作区）
+# 有人改动配置后污染工作区。*.tsbuildinfo 为 PR #25 补充的通配兜底）
 tsconfig.tsbuildinfo
+*.tsbuildinfo
