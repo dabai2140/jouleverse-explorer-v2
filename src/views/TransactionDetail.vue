@@ -24,6 +24,11 @@
             <JvHashText :value="String(transaction.blockNumber)" type="block" :truncate="0" />
           </div>
           <div class="info-item">
+            <span class="label">确认数</span>
+            <span v-if="confirmations !== null" class="value">{{ confirmations }} 个区块</span>
+            <span v-else class="muted">—</span>
+          </div>
+          <div class="info-item">
             <span class="label">时间戳</span>
             <span class="value">{{ formatTimestamp(transaction.blockTimestamp) }} <span class="muted">(UTC) · {{ formatAge(transaction.blockTimestamp) }}</span></span>
           </div>
@@ -109,6 +114,7 @@ const props = defineProps<Props>()
 
 const transaction = ref<any>(null)
 const loading = ref(true)
+const confirmations = ref<number | null>(null)
 const txHash = ref(props.hash)
 const inputExpanded = ref(false)
 const copyState = ref<'idle' | 'copied' | 'error'>('idle')
@@ -168,15 +174,21 @@ const copyInput = async () => {
 const loadTransaction = async () => {
   loading.value = true
   try {
-    const [txData, receipt] = await Promise.all([
+    // 并行拉交易 + 回执 + 最新区块高度（确认数 = 最新区块 - 交易区块 + 1，零额外串行延迟）
+    const [txData, receipt, latestBlock] = await Promise.all([
       publicClient.getTransaction({ hash: props.hash as `0x${string}` }),
       publicClient.getTransactionReceipt({ hash: props.hash as `0x${string}` }),
+      publicClient.getBlockNumber(),
     ])
     const block = await publicClient.getBlock({ blockNumber: txData.blockNumber! })
     transaction.value = { ...txData, ...receipt, blockTimestamp: block.timestamp }
+    if (receipt.blockNumber != null) {
+      confirmations.value = Math.max(0, Number(latestBlock) - Number(receipt.blockNumber) + 1)
+    }
   } catch (error) {
     console.error('Failed to fetch transaction:', error)
     transaction.value = null
+    confirmations.value = null
   } finally {
     loading.value = false
   }
