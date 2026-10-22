@@ -128,12 +128,14 @@ export function useCoreId(address: string) {
     popHistory.value = result
   }
 
-  const load = async () => {
+  const load = async (silent = false) => {
     if (!isAddress(addr)) {
       error.value = '地址格式无效'
       return
     }
-    isLoading.value = true
+    // silent：软重载（如签到后）不置 isLoading，避免模板 v-if 切换到加载态
+    // 卸载 CoreIdCheckIn 组件——否则签到成功提示与乐观状态会随卸载一并丢失。
+    if (!silent) isLoading.value = true
     error.value = null
     try {
       await loadMyCoreIds()
@@ -142,7 +144,7 @@ export function useCoreId(address: string) {
       console.error('[useCoreId] 加载失败:', err)
       error.value = err instanceof Error ? err.message : String(err)
     } finally {
-      isLoading.value = false
+      if (!silent) isLoading.value = false
     }
   }
 

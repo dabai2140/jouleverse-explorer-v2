@@ -45,7 +45,7 @@
 
 ## （二）i18n 迁移清单（PR #23 内的中文硬编码）
 
-> 背景：i18n 基建只在 PR #22（feat/jns-domains-overview）分支，尚未合并进 explorer-v2，且 #22 已收敛为**中文单一语种（zh-Hans）**。因此 PR #23（feat/asset-center-m1）的中文文案目前是硬编码 + `TODO(i18n)` 标注，待 #22 合并后统一迁移到 `t()`。
+> **状态：✅ 已完成（PR #48，commit 25b02bd）**。CoreAssetsPanel.vue 全部中文硬编码已迁移到 `t()`，useNftEnumeration.ts 两处兜底文案同步迁移；zh-Hans.ts 新增 20 个 key，`TODO(i18n)` 标注已移除。
 
 文件：`src/components/CoreAssetsPanel.vue`（含新增的 NFT 枚举文案）。
 

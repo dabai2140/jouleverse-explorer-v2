@@ -3,7 +3,7 @@
     <JvPageState
       v-if="!walletStore.isConnected"
       type="wallet-disconnected"
-      description="签到操作需要连接钱包，请先在右上角连接 MetaMask。"
+      description="签到操作需要连接钱包，请先在右上角连接钱包（MetaMask / 欧易等）。"
     />
 
     <div v-else-if="walletStore.address?.toLowerCase() !== address.toLowerCase()" class="checkin-block wallet-warning">
@@ -47,6 +47,7 @@
       >
         {{ checkInButtonText }}
       </JvActionButton>
+      <p v-if="checkedInState" class="checked-in-hint">{{ checkedInState }}</p>
       <p v-if="checkInStatus" class="status-message">{{ checkInStatus }}</p>
       <p v-if="checkInError" class="error-message">{{ checkInError }}</p>
     </div>
@@ -82,11 +83,20 @@ const now = ref(Math.floor(Date.now() / 1000))
 const loadingCheckIn = ref(false)
 const checkInError = ref<string | null>(null)
 const checkInStatus = ref<string | null>(null)
+// 签到成功后的本地乐观更新：RPC 重拉 tokenURI 有读延迟，metadata.lastCheckInTime
+// 不会立即刷新，导致按钮仍停在「签到」。本地记录签到时刻，与 metadata 取较大值，
+// 保证签到后按钮立即切换为已签到状态，后台重拉校正。
+const localLastCheckInAt = ref(0)
 
-const lastCheckInTime = computed(() => props.metadata?.lastCheckInTime ?? 0)
+const lastCheckInTime = computed(() => Math.max(props.metadata?.lastCheckInTime ?? 0, localLastCheckInAt.value))
 const isLive = computed(() => props.metadata?.liveness ?? false)
 const sinceLastCheckIn = computed(() => Math.max(0, now.value - lastCheckInTime.value))
 const canCheckIn = computed(() => sinceLastCheckIn.value >= Number(minCheckInInterval.value))
+// 已签到且未到下次可签周期时，显示明确提示（签到间隔 1 天）
+const checkedInState = computed(() => {
+  if (!lastCheckInTime.value || canCheckIn.value) return ''
+  return '✓ 已签到'
+})
 
 const sinceLastCheckInText = computed(() => {
   if (!lastCheckInTime.value) return '从未签到'
@@ -95,7 +105,7 @@ const sinceLastCheckInText = computed(() => {
 
 const checkInButtonText = computed(() => {
   if (loadingCheckIn.value) return '签到中...'
-  if (canCheckIn.value) return '本月签到'
+  if (canCheckIn.value) return '签到'
   const remaining = Number(minCheckInInterval.value) - sinceLastCheckIn.value
   return `还需等待 ${formatDuration(remaining)}`
 })
@@ -146,6 +156,7 @@ const handleCheckIn = async () => {
     await waitForTransactionReceipt(wagmiConfig, { hash })
     checkInStatus.value = '签到成功！状态已更新。'
     now.value = Math.floor(Date.now() / 1000)
+    localLastCheckInAt.value = now.value
     emit('checkedIn')
   } catch (error) {
     checkInError.value = '签到失败: ' + safeErrorMessage(error)
@@ -220,6 +231,13 @@ onMounted(() => { loadCheckInParams() })
 
 .stat-label { color: var(--jv-text-muted); }
 .stat-value { color: var(--jv-text-primary); font-weight: 500; }
+
+.checked-in-hint {
+  color: var(--jv-success);
+  font-weight: 600;
+  text-align: center;
+  margin: 8px 0 0 0;
+}
 
 .status-message {
   color: var(--jv-success);

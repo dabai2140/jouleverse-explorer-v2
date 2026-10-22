@@ -1,12 +1,11 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { createConfig, http } from 'wagmi'
 import { injected } from 'wagmi/connectors'
-import { getPublicClient, reconnect } from '@wagmi/core'
+import { getPublicClient, reconnect, connect as wagmiConnect, disconnect as wagmiDisconnect } from '@wagmi/core'
 import { createDiscreteApi } from 'naive-ui'
-
-// 组件外弹 message（连接错误等需要在 store 层提示用户的场景）
-const { message } = createDiscreteApi(['message'])
+import { useThemeStore } from './theme'
+import { ChainMismatchError, isChainMismatch, isUserRejected } from '../utils/wallet-errors'
 
 // Jouleverse chain config
 const jouleverse = {
@@ -38,6 +37,16 @@ export const config = createConfig({
 })
 
 export const useWalletStore = defineStore('wallet', () => {
+  const themeStore = useThemeStore()
+  // 组件外弹 message（连接错误等需要在 store 层提示用户的场景）；
+  // 用 computed 跟随主题，避免在模块顶层求值一次后切主题不跟随
+  const { message } = createDiscreteApi(['message'], {
+    configProviderProps: computed(() => ({
+      theme: themeStore.naiveTheme,
+      themeOverrides: themeStore.naiveThemeOverrides,
+    })),
+  })
+
   const isConnected = ref(false)
   const address = ref<string | null>(null)
   const balance = ref<bigint | null>(null)
@@ -59,6 +68,17 @@ export const useWalletStore = defineStore('wallet', () => {
         address.value = accounts[0]
         isConnected.value = true
         await getBalance()
+        // 兜底补写 wagmi config.state.current：restoreConnection 走到 checkConnection
+        // 这条路径时（reconnect 两次都拿不到、但钱包侧确有授权账户），仅写 store 的
+        // isConnected/address 不够——wagmi 内部 state.current 仍为空，后续
+        // writeContract 会抛 ConnectorNotConnectedError。这里用 connect action 把
+        // 连接正式写入 state（injected 已授权时静默、不弹窗）。
+        try {
+          await wagmiConnect(config, { connector, chainId: jouleverse.id })
+        } catch {
+          // 已连接（state.current 已是本 connector）或其余失败：忽略。
+          // store 的 isConnected/address 已就绪，展示层不受影响。
+        }
       } else {
         isConnected.value = false
         address.value = null
@@ -137,10 +157,13 @@ export const useWalletStore = defineStore('wallet', () => {
         throw new Error('Wallet connector not found')
       }
 
+      // 用 wagmi connect action 连接并写入 config.state.current，覆盖「直连
+      // connector.connect() 不写 state」的口子，确保后续 writeContract 能
+      // 找到 connector（否则会抛 ConnectorNotConnectedError）。
       // 连接时携带 chainId：若钱包当前不在 Jouleverse 网络，
       // injected connector 会自动 wallet_switchEthereumChain；
       // 若网络未添加（错误码 4902），自动 wallet_addEthereumChain 兜底。
-      const result = await connector.connect({ chainId: jouleverse.id })
+      const result = await wagmiConnect(config, { connector, chainId: jouleverse.id })
       // chainId 校验：wallet_switchEthereumChain 返回非 4001 错误时，injected connector
       // 的 catch 会静默吞掉并返回旧 chainId（上游 injected.js:126-129），连接照样成功、
       // UI 显示已连接，但钱包仍停在错误链上，写操作（WJ 转账 / JNSVote 投票）会在错误网络签名。
@@ -151,8 +174,10 @@ export const useWalletStore = defineStore('wallet', () => {
         // 但上游静默吞掉 switch 错误、钱包仍停在错误链上。若不清理，刷新页面后
         // restoreConnection 会因残留标记误判已连接（在错误链上显示已连接）。
         // disconnect() 移除该标记并置 disconnected，下次 connect() 会自动清除。
-        await connector.disconnect().catch(() => {})
-        throw new Error(`连接到了错误的网络 (chainId=${result.chainId})，请切换到 Jouleverse`)
+        await wagmiDisconnect(config, { connector }).catch(() => {})
+        // 用带上实际 chainId 的强类型错误向上抛：上层据此走确定性分支，
+        // 不再靠 error.message 文本判断（文案会随库升级变化，必然漏判）。
+        throw new ChainMismatchError(result.chainId, jouleverse)
       }
       if (result && result.accounts && result.accounts.length > 0) {
         address.value = result.accounts[0]
@@ -162,6 +187,15 @@ export const useWalletStore = defineStore('wallet', () => {
       }
     } catch (error) {
       console.error('Failed to connect wallet:', error)
+      // 分类判定全部走确定性判据：链不匹配看错误类型 + chainId 数值，
+      // 用户拒绝看 viem 的 UserRejectedRequestError 类型 / EIP-1193 码 4001。
+      if (isChainMismatch(error)) {
+        // 上面已弹过「请在钱包中切换到 Jouleverse 网络」，此处不重复提示
+      } else if (isUserRejected(error)) {
+        message.error('已取消连接')
+      } else {
+        message.error('连接钱包失败，请重试')
+      }
       isConnected.value = false
       address.value = null
       balance.value = null
@@ -178,7 +212,7 @@ export const useWalletStore = defineStore('wallet', () => {
       const connector = config.connectors[0]
       if (!connector) return
 
-      await connector.disconnect()
+      await wagmiDisconnect(config, { connector })
       address.value = null
       isConnected.value = false
       balance.value = null

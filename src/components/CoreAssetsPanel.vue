@@ -1,19 +1,18 @@
 <template>
   <div class="core-assets-panel">
-    <JvLoading v-if="isLoading" label="资产加载中..." />
+    <JvLoading v-if="isLoading" :label="t('assetsLoading')" />
     <JvPageState
       v-else-if="error"
       type="network-error"
       :description="error"
-      action="重试"
+      :action="t('retry')"
       @action="load"
     />
-    <!-- TODO(i18n): 「暂无资产」为中文硬编码；待 PR #22 的 7 语种 i18n 合并进 explorer-v2 后统一迁移 -->
     <JvPageState
       v-else-if="isEmpty"
       type="empty"
-      title="暂无资产"
-      description="该地址暂未持有任何生态资产"
+      :title="t('noAssetsTitle')"
+      :description="t('noAssetsDesc')"
     />
     <template v-else>
       <!-- 余额类（native / erc20）+ NFT 数量概览：一次 multicall 结果 -->
@@ -37,7 +36,7 @@
               />
               <span v-else-if="isFungible(item.asset)" class="muted">—</span>
               <span v-else class="asset-count">
-                {{ item.value === null ? '—' : `${formatCount(item.value)} 个` }}
+                {{ item.value === null ? '—' : `${formatCount(item.value)} ${t('countUnit')}` }}
               </span>
             </div>
             <!-- 可枚举 NFT：持有 > 0 时提供「展开」入口（二级懒加载） -->
@@ -47,19 +46,19 @@
               :class="{ active: expandedKey === item.asset.key }"
               @click="toggleExpand(item.asset.key)"
             >
-              {{ expandedKey === item.asset.key ? '收起' : '展开' }}
+              {{ expandedKey === item.asset.key ? t('collapse') : t('expand') }}
             </button>
           </div>
 
           <!-- 展开后的 NFT 枚举（分页懒加载，首屏 RPC 不受影响） -->
           <div v-if="expandedKey === item.asset.key" class="nft-enum-panel">
             <div class="nft-enum-head muted">
-              {{ item.asset.name }} 明细
+              {{ t('nftDetailSuffix', { name: item.asset.name }) }}
             </div>
-            <JvLoading v-if="nftEnumLoading && nftEnumItems.length === 0" label="加载中..." />
+            <JvLoading v-if="nftEnumLoading && nftEnumItems.length === 0" :label="t('loadingText')" />
             <div v-else-if="nftEnumError" class="nft-enum-error muted">
-              枚举失败：{{ nftEnumError }}
-              <button class="btn-load-more" @click="nftEnumLoadMore">重试</button>
+              {{ t('enumError', { err: nftEnumError }) }}
+              <button class="btn-load-more" @click="nftEnumLoadMore">{{ t('retry') }}</button>
             </div>
             <div v-else class="nft-enum-list">
               <div v-for="(it, index) in nftEnumItems" :key="`${it.tokenId}-${index}`" class="nft-enum-item">
@@ -70,7 +69,7 @@
             </div>
             <div v-if="nftEnumLoaded < enumTotalCount" class="nft-enum-more">
               <button class="btn-load-more" :disabled="nftEnumLoading" @click="nftEnumLoadMore">
-                {{ nftEnumLoading ? '加载中...' : `加载更多（已显示 ${nftEnumLoaded} / ${enumTotalCount}）` }}
+                {{ nftEnumLoading ? t('loadingText') : t('loadMoreProgress', { loaded: nftEnumLoaded, total: enumTotalCount }) }}
               </button>
             </div>
           </div>
@@ -80,11 +79,11 @@
       <!-- JNS 域名枚举：分页懒加载，首屏只出前几个 -->
       <div v-if="jnsTotal !== 0 || loadingJns" class="jns-detail">
         <div class="jns-detail-head">
-          <span class="muted">JNS 域名持有明细</span>
+          <span class="muted">{{ t('jnsHoldingDetail') }}</span>
         </div>
-        <JvLoading v-if="loadingJns && jnsNames.length === 0" label="加载中..." />
+        <JvLoading v-if="loadingJns && jnsNames.length === 0" :label="t('loadingText')" />
         <div v-else-if="jnsTotal === null" class="jns-unknown muted">
-          域名数量读取失败，无法确定持有数量
+          {{ t('jnsCountUnknown') }}
         </div>
         <div v-else>
           <div class="jns-list">
@@ -92,11 +91,11 @@
           </div>
           <div v-if="jnsLoaded < Math.min(jnsTotalNum, JNS_MAX_DISPLAY)" class="jns-more">
             <button class="btn-load-more" :disabled="loadingJns" @click="loadMoreJns">
-              {{ loadingJns ? '加载中...' : `加载更多（已显示 ${jnsLoaded} / ${Math.min(jnsTotalNum, JNS_MAX_DISPLAY)}）` }}
+              {{ loadingJns ? t('loadingText') : t('loadMoreProgress', { loaded: jnsLoaded, total: Math.min(jnsTotalNum, JNS_MAX_DISPLAY) }) }}
             </button>
           </div>
           <p v-if="jnsTotalNum > JNS_MAX_DISPLAY" class="jns-overflow-hint muted">
-            前往 <a @click.prevent="$router.push('/jns')" href="#">JNS 查询页</a> 可查看全部域名
+            {{ t('jnsOverflowPrefix') }}<a @click.prevent="$router.push('/jns')" href="#">{{ t('jnsQueryLink') }}</a>{{ t('jnsOverflowSuffix') }}
           </p>
         </div>
       </div>
@@ -113,6 +112,7 @@ import { useNftEnumeration } from '../composables/useNftEnumeration'
 import { JvLoading, JvPageState, JvAmount } from '../design-system'
 import { CORE_ASSETS } from '../config/core-assets'
 import type { CoreAsset } from '../config/core-assets'
+import { t } from '../i18n'
 
 interface Props { address: string }
 const props = defineProps<Props>()
@@ -152,12 +152,11 @@ const isEmpty = computed(() =>
 
 // 大额数量缩写：≥1亿 → X.X亿；≥1万 → X.X万；其余原样。
 // 精度 1 位小数，去掉尾部 .0，避免过度缩写丢失信息。
-// TODO(i18n): 「万」「亿」为中文硬编码；待 PR #22 的 7 语种 i18n 合并进 explorer-v2 后统一迁移
 const formatCount = (n: bigint): string => {
   let v: number
   try { v = Number(BigInt(n)) } catch { return '—' }
-  if (v >= 1e8) return `${(v / 1e8).toFixed(1).replace(/\.0$/, '')}亿`
-  if (v >= 1e4) return `${(v / 1e4).toFixed(1).replace(/\.0$/, '')}万`
+  if (v >= 1e8) return `${(v / 1e8).toFixed(1).replace(/\.0$/, '')}${t('hundredMillion')}`
+  if (v >= 1e4) return `${(v / 1e4).toFixed(1).replace(/\.0$/, '')}${t('tenThousand')}`
   return String(v)
 }
 
