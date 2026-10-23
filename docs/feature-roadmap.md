@@ -124,7 +124,7 @@
   - ✅ 投票徽章画廊 + 区块实时更新（#19，commit b86a579）
   - ✅ 资格校验 checkEligibility（JTI + JNS 持仓，`useJNSVote.ts` L270-295）
   - ✅ 提案详情页（站内）：已完整接线（commit a5d3d76，2026-10-20 合入 explorer-v2）——`router/index.ts` 有 `/jnsvote/:id` 路由、`JNSVote.vue` 提案卡片 `@click` 跳转、`JNSVoteProposalDetail.vue` 组件三个入口齐备（核实方式：`git merge-base --is-ancestor a5d3d76 upstream/explorer-v2` 为真，且构建产物 `dist/assets/index-*.js` 内含 `jnsvoteProposalDetail` 路由名）
-- **状态**：✅ P3-1 全部子功能已完成。唯一残留是 `/tools` 工具集页仍把 JNSVote 卡片挂在「即将推出」分区且不可点击，属展示层收尾，已在 PR #48（`fix/final-polish`）中改为可点卡片，待合入
+- **状态**：✅ P3-1 全部子功能已完成，展示层收尾亦已闭环——`/tools` 工具集页的 JNSVote 卡片已从「即将推出」分区移出、改为可点击卡片（PR #48，commit bfb29a8，2026-10-22 合入）；核实方式：`src/views/ToolsHome.vue:157-169` 为 `router-link to="/jnsvote"` 且标注「已迁移」，而「即将推出」分区（L173 起）仅剩「数据分析面板」「多签钱包管理」两项
 
 ---
 
@@ -241,7 +241,7 @@ src/design-system/
   ✅ JNS 域名操作 — 绑定/解绑/发送J（2026-07-28）
 
 中期 ───────────────────────────────────────────
-  P3-1    JNSVote 治理投票 — ✅ 主体全部完成（列表/详情/写操作/资格校验/进度实时，2026-10-22 核实）；残留：/tools 入口卡片可点化随 PR #48 合入
+  P3-1    JNSVote 治理投票 — ✅ 全部完成（列表/详情/写操作/资格校验/进度实时，2026-10-22 核实；/tools 入口卡片可点化随 PR #48 于 2026-10-22 合入，无残留）
 
 2026-08-11 已清理（代码质量/性能收尾）────────
   ✅ format.ts 统一（utils/format.ts）
@@ -295,4 +295,4 @@ src/design-system/
 
 ---
 
-*最后更新：2026-10-22（大白 💎）*
+*最后更新：2026-10-23（大白 💎）*
