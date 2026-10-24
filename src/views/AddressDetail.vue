@@ -20,7 +20,15 @@
         <div class="info-grid">
           <div class="info-item">
             <span class="label">地址</span>
-            <span class="value address-formats" @click="cycleFormat" title="点击切换格式">
+            <span
+              class="value address-formats"
+              role="button"
+              tabindex="0"
+              @click="cycleFormat"
+              :title="formatLabelTitle + '（点击切换格式）'"
+              @keydown.enter.prevent="cycleFormat"
+              @keydown.space.prevent="cycleFormat"
+            >
               <span class="format-badge">{{ formatLabel }}</span>
               {{ formatAddress(displayAddress) }}
             </span>
@@ -28,18 +36,51 @@
           <div class="info-item all-formats">
             <span class="label">所有格式</span>
             <div class="format-list">
-              <div class="format-row" @click="selectFormat('hex')" :class="{ active: inputFormat === 'hex' }">
+              <div
+                class="format-row"
+                role="button"
+                tabindex="0"
+                :class="{ active: inputFormat === 'hex' }"
+                :title="FORMAT_HINTS.hex"
+                :aria-describedby="'fmt-hint-hex'"
+                @click="selectFormat('hex')"
+                @keydown.enter.prevent="selectFormat('hex')"
+                @keydown.space.prevent="selectFormat('hex')"
+              >
                 <span class="fmt-badge hex">HEX</span>
                 <span class="fmt-value">{{ hexAddress }}</span>
               </div>
-              <div class="format-row" @click="selectFormat('b32')" :class="{ active: inputFormat === 'b32' }">
+              <span :id="'fmt-hint-hex'" class="sr-only">{{ FORMAT_HINTS.hex }}</span>
+              <div
+                class="format-row"
+                role="button"
+                tabindex="0"
+                :class="{ active: inputFormat === 'b32' }"
+                :title="FORMAT_HINTS.b32"
+                :aria-describedby="'fmt-hint-b32'"
+                @click="selectFormat('b32')"
+                @keydown.enter.prevent="selectFormat('b32')"
+                @keydown.space.prevent="selectFormat('b32')"
+              >
                 <span class="fmt-badge b32">B32</span>
                 <span class="fmt-value">{{ b32Address }}</span>
               </div>
-              <div class="format-row" @click="selectFormat('full')" :class="{ active: inputFormat === 'full' }">
+              <span :id="'fmt-hint-b32'" class="sr-only">{{ FORMAT_HINTS.b32 }}</span>
+              <div
+                class="format-row"
+                role="button"
+                tabindex="0"
+                :class="{ active: inputFormat === 'full' }"
+                :title="FORMAT_HINTS.full"
+                :aria-describedby="'fmt-hint-full'"
+                @click="selectFormat('full')"
+                @keydown.enter.prevent="selectFormat('full')"
+                @keydown.space.prevent="selectFormat('full')"
+              >
                 <span class="fmt-badge full">JVA</span>
                 <span class="fmt-value">{{ fullAddress }}</span>
               </div>
+              <span :id="'fmt-hint-full'" class="sr-only">{{ FORMAT_HINTS.full }}</span>
             </div>
           </div>
           <div v-if="jnsName" class="info-item">
@@ -199,6 +240,15 @@ const hasPrevYear = computed(() => availableYears.value.length > 0 && currentYea
 const hasNextYear = computed(() => availableYears.value.length > 0 && currentYear.value < availableYears.value[availableYears.value.length - 1])
 
 const formatLabel = computed(() => ({ hex: 'HEX', b32: 'B32', full: 'JVA' }[inputFormat.value]))
+
+// 地址格式悬停/无障碍说明：单一常量源（模板与当前格式提示共用，避免双份文案漂移）
+const FORMAT_HINTS: Record<'hex' | 'b32' | 'full', string> = {
+  hex: 'HEX：十六进制地址（EVM 标准格式）',
+  b32: 'B32：Bech32m 编码地址',
+  full: 'JVA：中文地址（BIP39 词表编码）',
+}
+
+const formatLabelTitle = computed(() => FORMAT_HINTS[inputFormat.value])
 
 const displayAddress = computed(() => {
   if (inputFormat.value === 'hex') return hexAddress.value
@@ -478,6 +528,11 @@ function reloadAddressData() {
 /* ── Address format switcher ── */
 .address-formats { cursor: pointer; }
 
+.address-formats:focus-visible {
+  outline: 2px solid var(--jv-brand);
+  outline-offset: 2px;
+}
+
 .format-badge {
   display: inline-block;
   font-size: 0.7rem;
@@ -508,6 +563,31 @@ function reloadAddressData() {
 }
 
 .format-row:hover { background: var(--jv-bg-hover); }
+
+/* 键盘焦点：比 active 态 1px outline 更重的 2px 焦点环，避免选中行时焦点指示被 active outline 覆盖 */
+.format-row:focus-visible {
+  outline: 2px solid var(--jv-brand);
+  outline-offset: 2px;
+}
+/* 焦点落在选中行（active+focus 同时命中）时，保证焦点环不被 active 态 1px outline 覆盖：
+   主动升特异性，不依赖源码声明顺序 */
+.format-row.active:focus-visible {
+  outline: 2px solid var(--jv-brand);
+  outline-offset: 2px;
+}
+
+/* 屏幕阅读器专属隐藏文本（aria-describedby 指向，不占视觉空间） */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
 
 .format-row.active {
   background: var(--jv-brand-subtle);

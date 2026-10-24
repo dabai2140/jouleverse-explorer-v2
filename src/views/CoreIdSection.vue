@@ -7,7 +7,7 @@
 
       <template v-else>
         <div class="core-id-card">
-          <img v-if="metadata?.image" :src="metadata.image" :alt="metadata?.name" class="core-id-avatar" />
+          <img v-if="metadata?.image" :src="metadata.image" :alt="metadata?.name" :title="metadata?.name || 'Core ID 头像'" class="core-id-avatar" />
           <div class="core-id-info">
             <div class="core-id-title">Core ID #{{ coreId.toString() }}</div>
             <JvStatusTag :status="metadata?.liveness ? 'active' : 'expired'" />
@@ -37,6 +37,7 @@
               :key="entry.tokenId.toString()"
               class="pop-badge"
               :class="{ invalid: !entry.isValid }"
+              :title="popBadgeTitle(entry)"
             >
               <img :src="entry.metadata?.image" :alt="entry.metadata?.name" class="pop-badge-img" />
               <div class="pop-month">{{ entry.monthLabel }}</div>
@@ -61,6 +62,7 @@ import { computed, onMounted } from 'vue'
 import { useCoreId } from '../composables/useCoreId'
 import CoreIdCheckIn from './CoreIdCheckIn.vue'
 import { JvLoading, JvPageState, JvStatusTag } from '../design-system'
+import type { PopHistoryEntry } from '../types/coreid'
 
 interface Props {
   address: string
@@ -73,6 +75,18 @@ const { coreIds, popHistory, popHistoryTotal, popHistoryTruncated, popDisplayCou
 
 const coreId = computed(() => (coreIds.value.length > 0 ? coreIds.value[0].tokenId : null))
 const metadata = computed(() => (coreIds.value.length > 0 ? coreIds.value[0].metadata : null))
+
+// 签到徽章悬停提示：isValid 是「coreId 非空 且 metadata 非空 且 记录 coreId 匹配」三个条件的与，
+// false 有三种不同成因，须分别说明，否则常态场景（本地址无 Core ID 全部置灰）会误导用户。
+// 成因已在 useCoreId 加载时刻持久化为 invalidReason（快照 coreId），渲染期直接消费，
+// 不用实时 coreId 反推（避免 coreIds/popHistory 加载时序错位导致误报）。
+const popBadgeTitle = (entry: PopHistoryEntry): string => {
+  const name = entry.metadata?.name || '#' + entry.tokenId.toString()
+  if (entry.isValid) return `签到徽章：${name}`
+  if (entry.invalidReason === 'metadata') return `签到徽章：${name}（徽章元数据读取失败）`
+  if (entry.invalidReason === 'no-core-id') return `签到徽章：${name}（本地址未持有 Core ID）`
+  return `签到徽章：${name}（记录中的 Core ID 与本地址不符）`
+}
 
 onMounted(() => {
   load()
