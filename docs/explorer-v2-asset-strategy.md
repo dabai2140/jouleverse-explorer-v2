@@ -275,7 +275,7 @@ contract AssetRegistry {
 import { createPublicClient, http } from 'viem'
 
 const client = createPublicClient({
-  transport: http('https://rpc.jnsdao.com:8503'),
+  transport: http('https://rpc.jnsdao.com'),
   // chain: jouleverse,
 })
 

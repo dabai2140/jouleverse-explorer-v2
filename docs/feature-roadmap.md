@@ -149,7 +149,7 @@
 - **关联**：✅ P0-1
 
 #### ✅ PERF-2：JNS 持有列表无分批保护（已修复，2026-07-29）
-- **问题**：JNS 为 NFT，某些地址可能持有几十至数百个域名。若全量 `tokenOfOwnerByIndex` 一次打出，可能触发 RPC 限速（`rpc.jnsdao.com:8503` 是小型公共节点）。
+- **问题**：JNS 为 NFT，某些地址可能持有几十至数百个域名。若全量 `tokenOfOwnerByIndex` 一次打出，可能触发 RPC 限速（`rpc.jnsdao.com` 是小型公共节点）。
 - **当前 ABI 状态**：`jns.ts` 缺少 `balanceOf` 和 `tokenOfOwnerByIndex` 方法，需补充。
 - **解决方案**（已实现）：
   1. 先调 `balanceOf(addr)` 拿总数，立即渲染"持有 X 个 JNS 域名" ✅

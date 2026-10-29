@@ -145,7 +145,7 @@ const handleCheckIn = async () => {
   checkInStatus.value = null
   try {
     try { await switchChain(wagmiConfig, { chainId: jouleverseChain.id }) } catch {
-      checkInError.value = '请先在钱包中手动切换到 Jouleverse 网络（Chain ID: 3666，RPC: https://rpc.jnsdao.com:8503）'
+      checkInError.value = '请先在钱包中手动切换到 Jouleverse 网络（Chain ID: 3666，RPC: https://rpc.jnsdao.com）'
       loadingCheckIn.value = false
       return
     }

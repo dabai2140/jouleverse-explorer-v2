@@ -196,7 +196,7 @@ async function handleVote(isFor: boolean) {
     await load()
   } catch (error) {
     voteError.value = error instanceof SwitchChainError
-      ? '请先在钱包中手动切换到 Jouleverse 网络（Chain ID: 3666，RPC: https://rpc.jnsdao.com:8503）'
+      ? '请先在钱包中手动切换到 Jouleverse 网络（Chain ID: 3666，RPC: https://rpc.jnsdao.com）'
       : mapVoteError(error)
   } finally {
     voteLoading.value = null

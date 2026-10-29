@@ -17,7 +17,7 @@ const jouleverse = {
     decimals: 18,
   },
   rpcUrls: {
-    default: { http: ['https://rpc.jnsdao.com:8503'] },
+    default: { http: ['https://rpc.jnsdao.com'] },
   },
   blockExplorers: {
     default: { name: 'JScan', url: 'https://jscan.jnsdao.com' },
@@ -32,7 +32,7 @@ export const config = createConfig({
   // 不锁定 io.metamask rdns，不依赖 @metamask/connect-evm SDK。
   connectors: [injected()],
   transports: {
-    [jouleverse.id]: http('https://rpc.jnsdao.com:8503'),
+    [jouleverse.id]: http('https://rpc.jnsdao.com'),
   },
 })
 

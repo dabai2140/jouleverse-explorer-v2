@@ -172,7 +172,7 @@ export class JouleverseWeb3 {
       }
       return rpcConfig;
     } catch {
-      return 'https://rpc.jnsdao.com:8503';
+      return 'https://rpc.jnsdao.com';
     }
   }
   

@@ -122,7 +122,7 @@ const handleWithdraw = async () => {
     const { writeContract, switchChain } = await import('wagmi/actions')
     const { config: wagmiConfig } = await import('../stores/wallet')
     try { await switchChain(wagmiConfig, { chainId: jouleverseChain.id }) } catch {
-      operationError.value = '请先在钱包中手动切换到 Jouleverse 网络（Chain ID: 3666，RPC: https://rpc.jnsdao.com:8503）'
+      operationError.value = '请先在钱包中手动切换到 Jouleverse 网络（Chain ID: 3666，RPC: https://rpc.jnsdao.com）'
       loadingOperation.value = false
       return
     }
@@ -148,7 +148,7 @@ const handleTransfer = async () => {
     const { writeContract, switchChain } = await import('wagmi/actions')
     const { config: wagmiConfig } = await import('../stores/wallet')
     try { await switchChain(wagmiConfig, { chainId: jouleverseChain.id }) } catch {
-      operationError.value = '请先在钱包中手动切换到 Jouleverse 网络（Chain ID: 3666，RPC: https://rpc.jnsdao.com:8503）'
+      operationError.value = '请先在钱包中手动切换到 Jouleverse 网络（Chain ID: 3666，RPC: https://rpc.jnsdao.com）'
       loadingOperation.value = false
       return
     }

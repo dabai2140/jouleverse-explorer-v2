@@ -359,7 +359,7 @@ async function handleVote(proposal: JNSVoteProposal, isFor: boolean) {
     }
   } catch (error) {
     state.error = error instanceof SwitchChainError
-      ? '请先在钱包中手动切换到 Jouleverse 网络（Chain ID: 3666，RPC: https://rpc.jnsdao.com:8503）'
+      ? '请先在钱包中手动切换到 Jouleverse 网络（Chain ID: 3666，RPC: https://rpc.jnsdao.com）'
       : mapVoteError(error)
   } finally {
     state.loading = false
