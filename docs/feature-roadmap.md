@@ -194,6 +194,28 @@
 | ✅ 已修复 | `Home.vue` 区块串行加载（见 PERF-4） | `Home.vue` | 已改 `Promise.all` 并行加载 |
 | ✅ 已修复 | `HelloWorld.vue` 脚手架残留 | `src/components/HelloWorld.vue` | 无引用，已删除 |
 
+### 测试与类型检查基础设施（2026-10-24 ~ 10-26 建成）
+
+> 这一段此前**完全缺失**：2026-08-11 的收尾只覆盖了运行时性能与死代码，测试/类型检查侧的三个盲区直到 10 月才逐个补齐。
+> 记录于此避免后续误以为「质量项已全部收尾」。
+
+| 项 | 内容 | 状态 | 落点 |
+|---|---|---|---|
+| 测试环境 mock | `tests/setup.ts` 装 `window.matchMedia` mock，`vitest.config.ts` 挂 `setupFiles` | ✅ 已合入 | PR #51（c570d0f）|
+| `tests/` 纳入 typecheck | 新增 `tsconfig.test-vitest.json`（spec + setup + vitest.config）/ `tsconfig.test-node.json`（`jvaddress.test.ts`，node:test + 原生 strip-types），根 `tsconfig.json` references 追加两者 | ✅ 已合入 | PR #53（c2c6149）|
+| mock 归因注释修正 | 查明真根因是 **jsdom 30.1.3 全包 0 处 `matchMedia` 实现**（非 node 版本差异、非 npm/pnpm 布局差异）；此前 CI 未暴露是因**无 spec 覆盖该路径**（覆盖盲区），非环境差异 | ✅ 已合入 | PR #54（8984455）|
+| theme store 冒烟用例 | `tests/theme-store.spec.ts` 9 条（初始化 2 / 三态 4 / 写操作 2 / `$dispose` 清理 1），前两条初始化用例**不自装 mock**，完全依赖 `setup.ts` | ⏳ 待合入 | PR #56（dd192ab）|
+
+**当前基线**（`explorer-v2` 分支）：`npm run build` EXIT 0 / `vitest run` **13 passed** / `node --test tests/jvaddress.test.ts` **3 passed**。
+PR #56 合入后为 `vitest` **22 passed**（+9）。
+
+**两条必须记住的规则**：
+
+1. **`vue-tsc -b` 只走 `references`**，新增目录（如 `tests/`）不主动挂 project 就**永远假绿**。验证覆盖是否成立只能用**负向注入**（往目标文件写一行类型错误，看 `build` 是否变 EXIT 2），不能看「build 成功」就当覆盖了。
+2. **写测试必须做反证**：断言通过 ≠ 覆盖成立。绿可能来自 ①真的覆盖了 ②自己重复造了被测依赖（在 `beforeEach` 里自装 mock，spec 压根没依赖 `setup.ts`）③压根没执行到断言。唯一判定法是——**把你声称守护的那个依赖拿掉，看测试是否变红**。PR #56 第一版就是典型的假覆盖：9 条全绿，但摘掉 `setup.ts` 的 mock 后仍然 9 条全绿。
+
+**注意**：PR 分支**不触发 CI**（`deploy-pages.yml` 仅 `on.push: [feature/core-id-checkin, explorer-v2]`），PR 上 `check_runs: 0` / `commit status: pending` 是正常态，分支验证只能靠本地门禁。
+
 ### 设计系统接入
 
 新功能必须使用 `src/design-system/` 中的组件，旧页面**不主动迁移**，触达时随业务修改替换：
@@ -295,4 +317,4 @@ src/design-system/
 
 ---
 
-*最后更新：2026-10-23（大白 💎）*
+*最后更新：2026-10-27（大白 💎）—— 补记「测试与类型检查基础设施」章节（PR #51/#53/#54/#56）*
