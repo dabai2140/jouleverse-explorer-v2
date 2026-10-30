@@ -48,8 +48,8 @@ const clientSrc = readSrc('src/config/client.ts')
 const voteSrc = readSrc('src/contracts/jnsvote.ts')
 
 const CHAIN_ID = Number(pick(chainSrc, /id:\s*(\d+)/, '3666'))
-const HTTP_RPC = process.env.SMOKE_RPC || pick(chainSrc, /http:\s*\['([^']+)'\]/, 'https://rpc.jnsdao.com:8503')
-const WS_RPC = process.env.SMOKE_WS || pick(clientSrc, /webSocket\(\s*'([^']+)'/, 'wss://rpc.jnsdao.com:8505')
+const HTTP_RPC = process.env.SMOKE_RPC || pick(chainSrc, /http:\s*\['([^']+)'\]/, 'https://rpc.jnsdao.com')
+const WS_RPC = process.env.SMOKE_WS || pick(clientSrc, /webSocket\(\s*'([^']+)'/, 'wss://rpc.jnsdao.com/ws')
 const MULTICALL3 = pick(chainSrc, /multicall3:\s*\{\s*address:\s*'([^']+)'/, '0x52E8BB61d20259F0434Aefe0C2EfB48fDe77f9C2')
 const JNSVOTE = pick(voteSrc, /JNSVOTE_ADDRESS\s*=\s*'([^']+)'/, '0xEf1f38e95dd7F4FB564535F9317ecB3Bd419DA50')
 

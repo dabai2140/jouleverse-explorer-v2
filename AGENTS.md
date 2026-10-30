@@ -6,7 +6,7 @@ Explorer v2（Jscan v2）必须是纯前端项目，无需后端服务器即可�
 
 ## 原则二：RPC 节点零负担
 
-计算压力尽量放在用户端侧，不给 RPC 节点增加额外负担。Jouleverse 的 RPC 节点（`rpc.jnsdao.com:8503`）是小型公共节点，资源有限。应保证：
+计算压力尽量放在用户端侧，不给 RPC 节点增加额外负担。Jouleverse 的 RPC 节点（`rpc.jnsdao.com`）是小型公共节点，资源有限。应保证：
 
 - 单页面的 RPC 调用次数尽量少、尽量并行
 - 不使用全量扫描（如 `eth_getLogs` fromBlock: 0 toBlock: 'latest'）、大范围遍历等可能压榨 RPC 节点的操作

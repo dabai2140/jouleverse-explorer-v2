@@ -433,7 +433,7 @@ import { jouleverseChain } from '@/config/chain';
 
 export function useBlockchain() {
   const client = createPublicClient({
-    transport: http('https://rpc.jnsdao.com:8503'),
+    transport: http('https://rpc.jnsdao.com'),
     chain: jouleverseChain,
   });
   
