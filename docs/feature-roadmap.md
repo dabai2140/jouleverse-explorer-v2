@@ -18,7 +18,7 @@
 | 3 | 交易详情页 | ✅ 已完成 | `TransactionDetail.vue` | |
 | 4 | 地址详情页（基础） | ✅ 已完成 | `AddressDetail.vue` | |
 | 5 | 搜索框（区块/交易/地址） | ✅ 已完成 | `Home.vue` 内联 | |
-| 6 | 网络状态指示 | ✅ 已完成 | `NetworkStatus.vue` | |
+| 6 | 网络状态指示 | ✅ 已完成 | `Home.vue` 内联 status-pill | 原独立组件 `src/components/NetworkStatus.vue` 已于 f567f0c（2026-06-28）删除，逻辑并入 Home.vue（L13–16 渲染 / L151 `networkStatus` / L246-255 判定）|
 | 7 | Timelock 能量信息 | ✅ 已完成 | `Home.vue` | |
 | 8 | 运行时间统计 | ✅ 已完成 | `Home.vue` | |
 | 9 | MetaMask 钱包连接 | ✅ 已完成 | `App.vue` + `stores/wallet.ts` | |
@@ -31,8 +31,8 @@
 | 16 | Naive UI 设计系统基础 | ✅ 已完成 | `src/design-system/` | 本次实现（2026-06-23） |
 | 17 | 暗色/浅色/系统主题 | ✅ 已完成 | `stores/theme.ts` + `App.vue` | 本次实现 |
 | 18 | 地址交易历史 | ✅ 已完成 | `AddressDetail.vue` | getLogs + 按年翻页（2026-07-25，commit 1b7273c） |
-| 19 | JNS 完整记录展示 | ✅ 已完成 | `JNSDetail.vue` | 域名详情页 + 持有者其他域名 + /jns/:name 路由（2026-07-27，commit c6953b6） |
-| 20 | JNS 域名操作 | ✅ 已完成 | `JNSOperations.vue` | 绑定/解绑/发送J + 钱包连接 + B32支持（2026-07-28，commit 406a0fa） |
+| 19 | JNS 完整记录展示 | ✅ 已完成 | `JNSQuery.vue`（`/jns/:name` 路由复用） | 域名详情页 + 持有者其他域名 + /jns/:name 路由（2026-07-27，commit c6953b6 实改 `src/views/JNSQuery.vue`；无独立 JNSDetail.vue） |
+| 20 | JNS 域名操作 | ✅ 已完成 | `JNSQuery.vue`（钱包操作面板） | 绑定/解绑/发送J + 钱包连接 + B32支持（2026-07-28，commit 406a0fa 实改 `src/views/JNSQuery.vue` L126-215；无独立 JNSOperations.vue） |
 
 ---
 
@@ -70,7 +70,7 @@
 
 #### ✅ P1-2：JNS 完整记录展示（已完成，2026-07-27）
 - **说明**：域名详情页展示 JNS 的所有记录（Ethereum address、Twitter、GitHub、description 等 NFT metadata 字段）。
-- **文件**：`JNSDetail.vue`、`/jns/:name` 路由
+- **文件**：`src/views/JNSQuery.vue`（`/jns/:name` 路由复用同一组件）、`/jns/:name` 路由
 - **commit**：c6953b6（2026-07-27）
 
 ---
@@ -236,7 +236,7 @@ src/design-system/
 
 ---
 
-## 四、开发优先级建议
+## 五、开发优先级建议
 
 ```
 立即（性能/体验阻塞）─────────────────────────────
