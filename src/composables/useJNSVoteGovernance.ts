@@ -6,7 +6,7 @@
 
 import { ref } from 'vue'
 import { writeContract, waitForTransactionReceipt, switchChain } from 'wagmi/actions'
-import { encodeFunctionData, decodeFunctionData } from 'viem'
+import { encodeFunctionData, decodeFunctionData, toFunctionSelector } from 'viem'
 import { publicClient } from '../config/client'
 import { jouleverseChain } from '../config/chain'
 import { config as wagmiConfig } from '../stores/wallet'
@@ -18,8 +18,9 @@ import {
 } from '../contracts/jnsvoteGovernance'
 import { safeErrorMessage } from '../utils/error'
 
-// createProposal(string,string,uint256,uint256) 的 4 字节选择器（链上实测 0x6b5e1766）
-const CREATE_PROPOSAL_SELECTOR = '0x6b5e1766'
+// createProposal(string,string,uint256,uint256) 的 4 字节选择器
+// 从签名派生（与 createProposalABI 同源强一致），避免硬编码魔法值与 ABI 静默错位
+const CREATE_PROPOSAL_SELECTOR = toFunctionSelector('function createProposal(string,string,uint256,uint256)')
 
 export interface PendingProposalTx {
   txId: number
@@ -44,12 +45,16 @@ export function useJNSVoteGovernance() {
   const isLoading = ref(false)
   const loadError = ref<string | null>(null)
 
+  // 并发守卫序号：过期请求完成后丢弃写入，避免账户切换/断连时旧数据覆盖新状态
+  let govSeq = 0
+
   // 读取治理状态：当前地址是否签名人 + 待确认的「创建提案」交易列表
   // 安全边界（审计 2026-11-02 三项阻塞）：
-  //   1. isOwner 前置短路——非签名人 1 次 call 即返回，不触发后续多签扫描（零额外 RPC 负担，原则二）
+  //   1. isOwner 前置短路——非签名人仅 1 次轻量 isOwner 调用即返回，不触发后续多签扫描（原则二）
   //   2. 列表只保留 destination === JNSVote 且 selector === createProposal 的交易，
   //      避免把多签里积压的其它交易（WJ 提现 / ERC-20 划转 / addOwner 等）误展示成「创建提案」并误执行
   async function loadGovernance(address: string) {
+    const seq = ++govSeq
     isLoading.value = true
     loadError.value = null
     try {
@@ -61,12 +66,14 @@ export function useJNSVoteGovernance() {
         args: [address as `0x${string}`],
       })
       if (!owner) {
-        isSigner.value = false
-        signers.value = []
-        pendingTxs.value = []
+        if (seq === govSeq) {
+          isSigner.value = false
+          signers.value = []
+          pendingTxs.value = []
+        }
         return
       }
-      isSigner.value = true
+      if (seq === govSeq) isSigner.value = true
 
       // 签名人：读签名人列表 + 确认门槛
       const [ownersRaw, requiredRaw] = await publicClient.multicall({
@@ -77,11 +84,16 @@ export function useJNSVoteGovernance() {
         allowFailure: false,
       })
       const owners = (ownersRaw as readonly string[]).map((a) => a.toLowerCase())
+      if (seq !== govSeq) return
       signers.value = [...owners]
       required.value = BigInt(requiredRaw as bigint)
       const requiredNum = Number(requiredRaw as bigint) // 提到循环外（建议 4）
 
       // 待执行交易 id 列表（pending=true, executed=false）
+      // 注意：本多签合约的 getTransactionIds(from,to,...) 的 from/to 是「过滤后列表下标」而非
+      // 「原始交易 id 范围」（与 canonical Gnosis MultiSigWallet 语义不同，已真链实测：
+      // pending=30 时 getTransactionIds(0,30,true,false) 返回 30 个有效 id，传 total 会带出大量垃圾 id=0）。
+      // 因此用 pending 数作 to；防御性过滤 id===0 防合约升级/换址后语义回归。
       const countRaw = await publicClient.readContract({
         address: JNSVOTE_MULTISIG_ADDRESS,
         abi: multisigABI,
@@ -90,7 +102,7 @@ export function useJNSVoteGovernance() {
       })
       const count = Number(countRaw)
       if (count === 0) {
-        pendingTxs.value = []
+        if (seq === govSeq) pendingTxs.value = []
         return
       }
       const idsRaw = await publicClient.readContract({
@@ -99,7 +111,7 @@ export function useJNSVoteGovernance() {
         functionName: 'getTransactionIds',
         args: [0n, BigInt(count), true, false],
       })
-      const ids = (idsRaw as readonly bigint[]).map((n) => Number(n))
+      const ids = (idsRaw as readonly bigint[]).map((n) => Number(n)).filter((n) => n > 0) // 防御：剔除 id=0 垃圾
 
       // 先只读 transactions（destination/value/data/executed）做过滤，
       // 避免对无关交易额外读 isConfirmed/getConfirmations
@@ -165,11 +177,11 @@ export function useJNSVoteGovernance() {
         }
       })
 
-      pendingTxs.value = list
+      if (seq === govSeq) pendingTxs.value = list
     } catch (e) {
-      loadError.value = safeErrorMessage(e)
+      if (seq === govSeq) loadError.value = safeErrorMessage(e)
     } finally {
-      isLoading.value = false
+      if (seq === govSeq) isLoading.value = false
     }
   }
 
@@ -221,10 +233,15 @@ export function useJNSVoteGovernance() {
   // 从 receipt 解析 Submission 事件拿 transactionId
   // Gnosis MultiSigWallet 事件：event Submission(uint indexed transactionId)
   // topic0 = keccak256('Submission(uint256)')，topic[1] = indexed transactionId
-  function parseSubmissionTxId(receipt: { logs: readonly { topics: readonly string[] }[] }): number {
+  function parseSubmissionTxId(receipt: { logs: readonly { address?: string; topics: readonly string[] }[] }): number {
     const SUBMISSION_TOPIC = '0xc0ba8fe4b176c1714197d43b9cc6bcf797a4a7461c5fe8d0ef6e184ae7601e51'
     for (const log of receipt.logs) {
-      if (log.topics.length >= 2 && log.topics[0].toLowerCase() === SUBMISSION_TOPIC) {
+      // 校验发出合约是多签地址，避免同交易内其它合约误发同名事件被错解析
+      if (
+        log.address?.toLowerCase() === JNSVOTE_MULTISIG_ADDRESS.toLowerCase() &&
+        log.topics.length >= 2 &&
+        log.topics[0].toLowerCase() === SUBMISSION_TOPIC
+      ) {
         return parseInt(log.topics[1], 16)
       }
     }

@@ -18,7 +18,7 @@ const message = useMessage()
 const gov = useJNSVoteGovernance()
 
 // 解构 ref，供模板顶层自动解包（gov 是普通对象，模板访问 gov.xxx 不会自动解包）
-const { isSigner, pendingTxs, isLoading, signers } = gov
+const { isSigner, pendingTxs, isLoading, signers, loadError } = gov
 
 // 表单
 const form = ref({
@@ -74,11 +74,19 @@ async function refresh() {
 
 async function handleSubmit() {
   if (!walletStore.address) return
-  // 提交前重取最新块高（避免页面挂久后 currentBlock 漂移，导致「开始区块已过去」被放行）
+  // 提交前重取最新块高（避免页面挂久后 currentBlock 漂移，导致「开始区块已过去」被放行）。
+  // 取块高失败则阻断提交：否则 currentBlock 停在 0n 会绕过 tb > currentBlock 校验，
+  // 可能造出 timeBegin/timeEnd 均已过去的永久死提案（合约无法补救）
   try {
     currentBlock.value = await publicClient.getBlockNumber()
-  } catch { /* 取块高失败仍走前端校验，最终以合约/交易执行为准 */ }
-  if (!formValid.value) return
+  } catch {
+    message.error('无法获取当前区块高度，已取消提交（请检查网络后重试）')
+    return
+  }
+  if (!formValid.value) {
+    message.error('开始区块须晚于当前区块，且结束区块须晚于开始区块，请调整后重试')
+    return
+  }
   submitting.value = true
   try {
     const txId = await gov.submitProposal({
@@ -151,7 +159,15 @@ onMounted(async () => {
 watch(
   () => walletStore.address,
   (addr) => {
-    if (addr) refresh()
+    if (addr) {
+      refresh()
+    } else {
+      // 断连时清治理状态，避免面板残留上一账户的签名人/交易内容；并重置 loading
+      isSigner.value = false
+      pendingTxs.value = []
+      loadError.value = null
+      isLoading.value = false
+    }
   },
 )
 </script>
@@ -159,6 +175,8 @@ watch(
 <template>
   <div v-if="isSigner" class="gov-panel">
     <NDivider title-placement="left">🛡️ 治理端（多签签名人专属）</NDivider>
+
+    <div v-if="loadError" class="gov-load-error">⚠️ {{ loadError }}</div>
 
     <NSpin :show="isLoading">
       <!-- 创建提案表单 -->
@@ -276,6 +294,14 @@ watch(
 .gov-form-hint {
   font-size: 12px;
   color: var(--jv-text-muted, #64748b);
+}
+.gov-load-error {
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: var(--jv-error, #dc2626);
+  background: var(--jv-error-bg, #fef2f2);
+  border-radius: 8px;
 }
 .gov-pending {
   border-top: 1px solid var(--jv-border, #e5e5e5);
