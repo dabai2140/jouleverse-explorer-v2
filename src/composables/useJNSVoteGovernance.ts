@@ -279,6 +279,16 @@ export function useJNSVoteGovernance() {
     }
   }
 
+  // 重置治理状态并作废在途请求（断连时调用，避免 in-flight 完成后回写旧账户数据）
+  function reset(): void {
+    govSeq++ // 使所有在途 loadGovernance 完成后因 seq 过期而丢弃写入
+    isSigner.value = false
+    signers.value = []
+    pendingTxs.value = []
+    loadError.value = null
+    isLoading.value = false
+  }
+
   return {
     isSigner,
     signers,
@@ -287,6 +297,7 @@ export function useJNSVoteGovernance() {
     isLoading,
     loadError,
     loadGovernance,
+    reset,
     submitProposal,
     confirmTx,
     executeTx,

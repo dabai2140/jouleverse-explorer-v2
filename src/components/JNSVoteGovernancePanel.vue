@@ -18,7 +18,7 @@ const message = useMessage()
 const gov = useJNSVoteGovernance()
 
 // 解构 ref，供模板顶层自动解包（gov 是普通对象，模板访问 gov.xxx 不会自动解包）
-const { isSigner, pendingTxs, isLoading, signers, loadError } = gov
+const { isSigner, pendingTxs, isLoading, signers, loadError, reset } = gov
 
 // 表单
 const form = ref({
@@ -28,6 +28,8 @@ const form = ref({
   timeEnd: '',
 })
 const submitting = ref(false)
+// per-tx 写操作 loading（防连点：确认/执行签名上链需十几秒）
+const txBusyId = ref<number | null>(null)
 
 // 当前区块高度（用于校验「开始区块须晚于当前」+ 提示起止区块合理值）
 const currentBlock = ref(0n)
@@ -110,22 +112,30 @@ async function handleSubmit() {
 }
 
 async function handleConfirm(tx: PendingProposalTx) {
+  if (txBusyId.value !== null) return
+  txBusyId.value = tx.txId
   try {
     await gov.confirmTx(tx.txId)
     message.success(`已确认交易 #${tx.txId}`)
     await refresh()
   } catch (e) {
     message.error(e instanceof Error ? e.message : String(e))
+  } finally {
+    txBusyId.value = null
   }
 }
 
 async function handleExecute(tx: PendingProposalTx) {
+  if (txBusyId.value !== null) return
+  txBusyId.value = tx.txId
   try {
     await gov.executeTx(tx.txId)
     message.success(`已执行交易 #${tx.txId}，提案已创建`)
     await refresh()
   } catch (e) {
     message.error(e instanceof Error ? e.message : String(e))
+  } finally {
+    txBusyId.value = null
   }
 }
 
@@ -162,11 +172,8 @@ watch(
     if (addr) {
       refresh()
     } else {
-      // 断连时清治理状态，避免面板残留上一账户的签名人/交易内容；并重置 loading
-      isSigner.value = false
-      pendingTxs.value = []
-      loadError.value = null
-      isLoading.value = false
+      // 断连时重置治理状态并作废在途请求，避免 in-flight 完成后回写旧账户数据
+      reset()
     }
   },
 )
@@ -244,6 +251,8 @@ watch(
               size="small"
               type="primary"
               ghost
+              :loading="txBusyId === tx.txId"
+              :disabled="txBusyId !== null && txBusyId !== tx.txId"
               @click="handleConfirm(tx)"
             >
               确认
@@ -252,6 +261,8 @@ watch(
               v-if="tx.confirmed"
               size="small"
               type="success"
+              :loading="txBusyId === tx.txId"
+              :disabled="txBusyId !== null && txBusyId !== tx.txId"
               @click="handleExecute(tx)"
             >
               执行（创建提案）
