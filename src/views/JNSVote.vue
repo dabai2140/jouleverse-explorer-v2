@@ -93,6 +93,9 @@
       </div>
     </div>
 
+    <!-- 治理端（多签签名人专属：创建提案） -->
+    <JNSVoteGovernancePanel />
+
     <!-- 加载 / 异常 / 空态 -->
     <div v-if="isLoading" class="loading-wrap">
       <JvLoading label="正在读取链上提案..." />
@@ -249,6 +252,7 @@ import { wsPublicClient } from '../config/client'
 import { useJNSVote, mapVoteError, SwitchChainError } from '../composables/useJNSVote'
 import type { JNSVoteProposal } from '../composables/useJNSVote'
 import { JvLoading, JvPageState, JvHashText, JvStatusTag, JvActionButton } from '../design-system'
+import JNSVoteGovernancePanel from '../components/JNSVoteGovernancePanel.vue'
 
 const walletStore = useWalletStore()
 const router = useRouter()
