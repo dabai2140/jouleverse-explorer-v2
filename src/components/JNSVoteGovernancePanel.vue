@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // JNSVote 治理端面板：创建提案（多签流程）+ 待确认交易管理
-// 仅对「多签签名人」（Koant/剪云为裳/明海云）展示；普通投票者看不到本面板。
+// 仅对「多签签名人」展示；普通投票者看不到本面板（isOwner 前置短路，零额外 RPC 负担）。
 // 流程：签名人填表 → submitProposal（自动成为首确认人）→ 其余签名人 confirm → 任一签名人 execute。
 
 import { ref, computed, onMounted, watch } from 'vue'
@@ -11,12 +11,14 @@ import { useJNSVoteGovernance, type PendingProposalTx } from '../composables/use
 import { publicClient } from '../config/client'
 import { JvHashText } from '../design-system'
 
+const BLOCK_TIME_SEC = 15 // Jouleverse 平均出块时间（与 useJNSVote 一致）
+
 const walletStore = useWalletStore()
 const message = useMessage()
 const gov = useJNSVoteGovernance()
 
 // 解构 ref，供模板顶层自动解包（gov 是普通对象，模板访问 gov.xxx 不会自动解包）
-const { isSigner, pendingTxs, isLoading } = gov
+const { isSigner, pendingTxs, isLoading, signers } = gov
 
 // 表单
 const form = ref({
@@ -27,7 +29,7 @@ const form = ref({
 })
 const submitting = ref(false)
 
-// 当前区块高度（用于提示起止区块合理值）
+// 当前区块高度（用于校验「开始区块须晚于当前」+ 提示起止区块合理值）
 const currentBlock = ref(0n)
 
 // 表单校验
@@ -38,6 +40,8 @@ const formValid = computed(() => {
     form.value.title.trim().length > 0 &&
     tb !== null &&
     te !== null &&
+    // 阻塞 3：开始区块必须晚于当前区块，否则提案创建即「already ended」，无人能投票
+    tb > currentBlock.value &&
     te > tb
   )
 })
@@ -52,13 +56,29 @@ function parseBlockHeight(s: string): bigint | null {
   }
 }
 
+// 区块差 → 人类可读天数提示（建议 6：避免签名人自己心算区块对应哪天）
+function blockDeltaHint(block: bigint): string {
+  if (block <= currentBlock.value || currentBlock.value === 0n) return ''
+  const seconds = Number(block - currentBlock.value) * BLOCK_TIME_SEC
+  const days = Math.floor(seconds / 86400)
+  const hours = Math.floor((seconds % 86400) / 3600)
+  if (days > 0) return hours > 0 ? `≈ ${days} 天 ${hours} 小时后` : `≈ ${days} 天后`
+  if (hours > 0) return `≈ ${hours} 小时后`
+  return '即将'
+}
+
 async function refresh() {
   if (!walletStore.address) return
   await gov.loadGovernance(walletStore.address)
 }
 
 async function handleSubmit() {
-  if (!formValid.value || !walletStore.address) return
+  if (!walletStore.address) return
+  // 提交前重取最新块高（避免页面挂久后 currentBlock 漂移，导致「开始区块已过去」被放行）
+  try {
+    currentBlock.value = await publicClient.getBlockNumber()
+  } catch { /* 取块高失败仍走前端校验，最终以合约/交易执行为准 */ }
+  if (!formValid.value) return
   submitting.value = true
   try {
     const txId = await gov.submitProposal({
@@ -105,14 +125,20 @@ function shortAddr(a: string): string {
   return a.length > 10 ? `${a.slice(0, 6)}…${a.slice(-4)}` : a
 }
 
-// 地址 → 显示名（签名人身份）
+// 地址 → 显示名。
+// 以链上 getOwners() 顺序为准（signers 数组），本地 SIGNER_NAMES 只作可选装饰；
+// 多签若改成员（如历史 addOwner），未命中映射时回退为「签名人 #N + 地址」，不会静默失效成裸地址（建议 3）
 const SIGNER_NAMES: Record<string, string> = {
   '0x5bf50f2931688f886f46f88d5ceede530bb92076': 'Koant (J-0)',
   '0xe369810b1b07d0b82f702667429c3842905c14ff': '剪云为裳 (J-37)',
   '0xf66082f48cbc11ac83cdde11644f4db2f363205a': '明海云 (J-7)',
 }
 function signerName(a: string): string {
-  return SIGNER_NAMES[a.toLowerCase()] ?? shortAddr(a)
+  const lower = a.toLowerCase()
+  if (SIGNER_NAMES[lower]) return SIGNER_NAMES[lower]
+  // 回退：在链上 signers 里找序号，显示「签名人 #N」；找不到再退化为短地址
+  const idx = signers.value.findIndex((s) => s === lower)
+  return idx >= 0 ? `签名人 #${idx + 1} ${shortAddr(a)}` : shortAddr(a)
 }
 
 onMounted(async () => {
@@ -149,13 +175,19 @@ watch(
         <div class="gov-form-row">
           <label class="gov-label">开始区块 *</label>
           <NInput v-model:value="form.timeBegin" placeholder="如 8600000（须 > 当前区块）" />
+          <div v-if="parseBlockHeight(form.timeBegin) !== null" class="gov-form-hint">
+            开始区块 ≈ {{ blockDeltaHint(parseBlockHeight(form.timeBegin)!) }}
+          </div>
         </div>
         <div class="gov-form-row">
           <label class="gov-label">结束区块 *</label>
           <NInput v-model:value="form.timeEnd" placeholder="如 8800000（须 > 开始区块）" />
+          <div v-if="parseBlockHeight(form.timeEnd) !== null" class="gov-form-hint">
+            结束区块 ≈ {{ blockDeltaHint(parseBlockHeight(form.timeEnd)!) }}
+          </div>
         </div>
         <div v-if="currentBlock > 0n" class="gov-form-hint">
-          当前区块：{{ currentBlock.toString() }}（约 15s/块）
+          当前区块：{{ currentBlock.toString() }}（约 {{ BLOCK_TIME_SEC }}s/块）
         </div>
         <NButton
           type="primary"
@@ -167,11 +199,11 @@ watch(
         </NButton>
       </div>
 
-      <!-- 待确认交易列表 -->
+      <!-- 待确认交易列表（仅「创建提案」类交易，见 useJNSVoteGovernance 过滤） -->
       <div class="gov-pending">
-        <h3 class="gov-form-title">⏳ 待确认的多签交易（{{ pendingTxs.length }}）</h3>
+        <h3 class="gov-form-title">⏳ 待确认的「创建提案」交易（{{ pendingTxs.length }}）</h3>
         <div v-if="pendingTxs.length === 0" class="gov-empty">
-          暂无待执行的多签交易
+          暂无待执行的创建提案交易
         </div>
         <div v-for="tx in pendingTxs" :key="tx.txId" class="gov-tx">
           <div class="gov-tx-head">
@@ -180,17 +212,17 @@ watch(
               {{ tx.confirmed ? `${tx.confirmationCount}/${tx.required} 已确认` : `${tx.confirmationCount}/${tx.required} 确认中` }}
             </NTag>
           </div>
-          <div v-if="tx.title" class="gov-tx-title">{{ tx.title }}</div>
+          <div class="gov-tx-title">{{ tx.title }}</div>
           <div class="gov-tx-meta">
             目标：<JvHashText :value="tx.destination" type="address" :truncate="12" />
-            <span v-if="tx.title">｜区块 {{ tx.timeBegin.toString() }} → {{ tx.timeEnd.toString() }}</span>
+            ｜区块 {{ tx.timeBegin.toString() }} → {{ tx.timeEnd.toString() }}
           </div>
           <div class="gov-tx-confirmers">
             已确认：<span v-for="c in tx.confirmations" :key="c" class="gov-signer">{{ signerName(c) }}</span>
           </div>
           <div class="gov-tx-actions">
             <NButton
-              v-if="!tx.confirmed"
+              v-if="!tx.confirmed && !tx.confirmations.includes((walletStore.address || '').toLowerCase())"
               size="small"
               type="primary"
               ghost
