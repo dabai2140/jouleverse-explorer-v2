@@ -63,6 +63,22 @@
       </div>
     </section>
 
+    <section class="tools-category">
+      <h2 class="category-title">📚 生态目录</h2>
+      <div class="tools-grid">
+        <router-link to="/contracts" class="tool-card">
+          <h3 class="tool-card-title">生态合约注册目录</h3>
+          <p class="tool-desc">本地部署清单、合约地址与交互工具入口，无需查询节点。</p>
+          <span class="tool-link">查看目录 →</span>
+        </router-link>
+        <router-link to="/validators" class="tool-card">
+          <h3 class="tool-card-title">验证者 / 签名人目录</h3>
+          <p class="tool-desc">从最近 Clique 检查点解析签名人集合，非在线状态监控。</p>
+          <span class="tool-link">查看目录 →</span>
+        </router-link>
+      </div>
+    </section>
+
     <!-- 通用工具 -->
     <section class="tools-category">
       <h2 class="category-title">

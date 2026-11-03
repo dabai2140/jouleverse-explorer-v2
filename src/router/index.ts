@@ -14,6 +14,8 @@ import JNSVoteProposalDetail from '../views/JNSVoteProposalDetail.vue'
 import JnsDomains from '../views/JnsDomains.vue'
 
 const routes = [
+  { path: '/contracts', name: 'contractRegistry', component: () => import('../views/ContractRegistry.vue') },
+  { path: '/validators', name: 'validators', component: () => import('../views/Validators.vue') },
   {
     path: '/',
     name: 'home',
