@@ -49,6 +49,7 @@ onMounted(load)
     <JvPageState v-else-if="error" type="network-error" :description="error" action="重试" @action="load" />
     <template v-else-if="sample && metrics">
       <p class="scope">区块 {{ sample.blocks[0]?.number }}—{{ sample.blocks[sample.blocks.length - 1]?.number }} · {{ new Date(sample.fetchedAt).toLocaleString() }} · {{ cached ? '60秒内缓存快照' : '节点读取快照' }}</p>
+      <p v-if="!metrics.transactions" class="empty-note">当前样本区间无交易，链上活动较少，以下指标与图表为空属正常现象。</p>
       <section class="cards" aria-label="样本指标">
         <article><span>样本交易数</span><strong>{{ metrics.transactions }}</strong></article>
         <article><span>样本活跃地址（非新增地址）</span><strong>{{ sample.activeAddresses }}</strong></article>
@@ -87,5 +88,6 @@ article span { color:var(--jv-text-secondary); } article strong { display:block;
 .track { background:var(--jv-bg-subtle); border-radius:var(--jv-radius-sm); height:14px; overflow:hidden; }
 .bar { height:100%; background:var(--jv-brand); } .target { display:flex; gap:20px; justify-content:space-between; padding:12px 0; border-bottom:1px solid var(--jv-border); } .target strong { white-space:nowrap; }
 aside { padding:16px; background:var(--jv-info-bg); border-radius:var(--jv-radius-md); }
+.empty-note { padding:12px; background:var(--jv-bg-subtle); border-radius:var(--jv-radius-md); color:var(--jv-text-secondary); }
 @media(max-width:600px) { .analytics { padding:16px; } .bar-row { grid-template-columns:88px 1fr 28px; gap:8px; } .target { font-size:.8rem; } }
 </style>

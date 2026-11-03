@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { encodeEventTopics, type Hex } from 'viem'
+import { encodeEventTopics, encodeFunctionData, type Hex } from 'viem'
 import { abi_multisig } from '../src/contracts/toolbox'
-import { assertSameTx, parseTxId, validatePayload, type MultisigTx } from '../src/utils/multisig'
+import { assertSameTx, describePayload, validatePayload, type MultisigTx } from '../src/utils/multisig'
 
 const mocks = vi.hoisted(() => ({
   getChainId: vi.fn(), getBlockNumber: vi.fn(), getBytecode: vi.fn(), getBalance: vi.fn(),
@@ -177,11 +177,17 @@ describe('通用多签读取与写入边界', () => {
     release(); await first
   })
   it('编号与金额保持整数范围，禁止畸形十六进制', () => {
-    expect(parseTxId('0')).toBe(0n)
-    expect(parseTxId('9007199254740993')).toBe(9007199254740993n)
-    for (const id of ['-1', '1.5', '1e5', String(2n ** 256n)]) expect(() => parseTxId(id)).toThrow()
     for (const data of ['0x1', 'oops']) expect(() => validatePayload(B, 0n, data)).toThrow()
     expect(() => validatePayload(B, 0n, '0x1234')).not.toThrow()
     expect(() => validatePayload(B, -1n, '0x')).toThrow()
+  })
+  it('自管理交易按多签 ABI 解码，不误显为未知调用', () => {
+    const self = W
+    const addOwner = encodeFunctionData({ abi: abi_multisig, functionName: 'addOwner', args: [A] })
+    expect(describePayload(self, addOwner, self)).toContain('addOwner')
+    const changeReq = encodeFunctionData({ abi: abi_multisig, functionName: 'changeRequirement', args: [3n] })
+    expect(describePayload(self, changeReq, self)).toContain('changeRequirement')
+    // 目标不是多签自身时，仍走注册表/未知调用，不套用多签 ABI
+    expect(describePayload(B, addOwner, self)).toContain('未知调用')
   })
 })

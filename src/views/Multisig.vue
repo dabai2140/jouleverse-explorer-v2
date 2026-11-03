@@ -94,7 +94,7 @@ async function approve() {
         <h3>#{{ tx.id }} · {{ tx.executed ? '已执行' : '待执行' }} · {{ tx.confirmations.length }}/{{ info.required }}确认</h3>
         <p>目标：<router-link :to="`/address/${tx.destination}`">{{ tx.destination }}</router-link></p>
         <p>附带原生金额：<strong>{{ formatEther(tx.value) }} J</strong> · 最小单位 {{ tx.value }}</p>
-        <p>函数选择器：<code>{{ selector(tx.data) }}</code></p><p>{{ describePayload(tx.destination, tx.data) }}</p>
+        <p>函数选择器：<code>{{ selector(tx.data) }}</code></p><p>{{ describePayload(tx.destination, tx.data, info?.address) }}</p>
         <details><summary>完整调用数据与确认人</summary><pre>{{ tx.data }}</pre><p v-for="owner in tx.confirmations" :key="owner" class="mono">{{ owner }}</p></details>
         <div v-if="!tx.executed && signer" class="row">
           <JvActionButton v-if="!tx.confirmations.includes(wallet.address!.toLowerCase())" :disabled="locked || loading" @click="prepareAction(tx, 'confirmTransaction')">审阅并确认</JvActionButton>
@@ -118,7 +118,7 @@ async function approve() {
       <h2>{{ review.kind === 'submit' ? '提交新交易' : labels[review.action] }}</h2>
       <p>付款／操作多签：{{ reviewTx.wallet }}</p><p>签名账户：{{ review.actor }}</p>
       <p>目标：{{ reviewTx.destination }}</p><p>原生金额：{{ formatEther(reviewTx.value) }} J（{{ reviewTx.value }}最小单位）</p>
-      <p>选择器：{{ selector(reviewTx.data) }}</p><p>{{ describePayload(reviewTx.destination, reviewTx.data) }}</p><pre>{{ reviewTx.data }}</pre>
+      <p>选择器：{{ selector(reviewTx.data) }}</p><p>{{ describePayload(reviewTx.destination, reviewTx.data, info?.address) }}</p><pre>{{ reviewTx.data }}</pre>
       <p class="warning">确认交易达到门槛时也可能立即执行。请核对目标、金额与全部参数；未知函数不能仅凭选择器判定用途。</p>
       <label><input v-model="acknowledged" type="checkbox" />我已核对上述多签、目标、金额和完整调用数据，并理解执行风险</label>
       <div class="row"><JvActionButton :disabled="!acknowledged || locked" :loading="writing" @click="approve">在钱包中签名</JvActionButton><JvActionButton :disabled="locked" @click="review = null">取消</JvActionButton></div>

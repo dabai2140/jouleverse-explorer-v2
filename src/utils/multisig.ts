@@ -1,5 +1,5 @@
-import { decodeFunctionData, getAddress, isAddress, isHex, zeroAddress, type Hex } from 'viem'
-import { toolboxContracts } from '../contracts/toolbox'
+import { decodeFunctionData, getAddress, isAddress, isHex, zeroAddress, type Abi, type Hex } from 'viem'
+import { abi_multisig, toolboxContracts } from '../contracts/toolbox'
 
 export interface MultisigTx {
   wallet: Hex
@@ -14,12 +14,6 @@ export interface MultisigTx {
 export function walletAddress(value: string): Hex {
   if (!isAddress(value) || value.toLowerCase() === zeroAddress) throw new Error('请输入有效的非零多签地址')
   return getAddress(value)
-}
-export function parseTxId(value: string): bigint {
-  if (!/^(0|[1-9]\d*)$/.test(value)) throw new Error('交易编号必须为非负整数')
-  const id = BigInt(value)
-  if (id >= 2n ** 256n) throw new Error('交易编号超出范围')
-  return id
 }
 export function validatePayload(destination: string, value: bigint, data: string) {
   walletAddress(destination)
@@ -41,14 +35,22 @@ export function assertSameTx(expected: MultisigTx, actual: MultisigTx) {
     throw new Error('链上交易归属或内容与已审阅快照不一致，请刷新后重新审阅')
   }
 }
-export function describePayload(destination: Hex, data: Hex): string {
+const MULTISIG_ABI: Abi = abi_multisig
+
+export function describePayload(destination: Hex, data: Hex, multisigSelf?: Hex): string {
   if (data === '0x') return '空调用数据：可能为转账或接收函数，请确认目标用途'
+  const decodeCandidates: { label: string; abi: Abi }[] = []
   const contract = toolboxContracts.find((c) => c.address.toLowerCase() === destination.toLowerCase())
-  if (contract) {
+  if (contract) decodeCandidates.push({ label: contract.name, abi: contract.abi })
+  // 自管理交易：目标即当前多签本身，即使未登记进 toolbox 注册表，也按经典 Gnosis 多签 ABI 解码（addOwner/changeRequirement 等）
+  if (multisigSelf && destination.toLowerCase() === multisigSelf.toLowerCase()) {
+    decodeCandidates.push({ label: '多签自管理', abi: MULTISIG_ABI })
+  }
+  for (const { label, abi } of decodeCandidates) {
     try {
-      const decoded = decodeFunctionData({ abi: contract.abi, data })
-      return `${contract.name} · ${decoded.functionName} · ${JSON.stringify(decoded.args, (_, v) => typeof v === 'bigint' ? String(v) : v)}`
-    } catch { /* 未知函数明确显示原文，绝不套用提案标签 */ }
+      const decoded = decodeFunctionData({ abi, data })
+      return `${label} · ${decoded.functionName} · ${JSON.stringify(decoded.args, (_, v) => typeof v === 'bigint' ? String(v) : v)}`
+    } catch { /* 尝试下一候选解码 */ }
   }
   return `未知调用 · 选择器 ${selector(data)}（未核验实际语义，必须独立核对完整调用数据）`
 }
