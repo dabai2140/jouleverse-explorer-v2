@@ -90,10 +90,9 @@ export function useJNSVoteGovernance() {
       const requiredNum = Number(requiredRaw as bigint) // 提到循环外（建议 4）
 
       // 待执行交易 id 列表（pending=true, executed=false）
-      // 注意：本多签合约的 getTransactionIds(from,to,...) 的 from/to 是「过滤后列表下标」而非
-      // 「原始交易 id 范围」（与 canonical Gnosis MultiSigWallet 语义不同，已真链实测：
-      // pending=30 时 getTransactionIds(0,30,true,false) 返回 30 个有效 id，传 total 会带出大量垃圾 id=0）。
-      // 因此用 pending 数作 to；防御性过滤 id===0 防合约升级/换址后语义回归。
+      // getTransactionIds(from,to,...) 的 from/to 是「过滤后列表下标」；to 超过过滤后长度时
+      // 合约会在末尾用 0 补齐（id=0 本身是合法的第一笔交易，不能按值过滤）。
+      // 因此用 pending 数作 to，并只按请求的数量截断返回数组，避免把补齐位当作交易读取。
       const countRaw = await publicClient.readContract({
         address: JNSVOTE_MULTISIG_ADDRESS,
         abi: multisigABI,
@@ -111,7 +110,7 @@ export function useJNSVoteGovernance() {
         functionName: 'getTransactionIds',
         args: [0n, BigInt(count), true, false],
       })
-      const ids = (idsRaw as readonly bigint[]).map((n) => Number(n)).filter((n) => n > 0) // 防御：剔除 id=0 垃圾
+      const ids = (idsRaw as readonly bigint[]).slice(0, count).map((n) => Number(n))
 
       // 先只读 transactions（destination/value/data/executed）做过滤，
       // 避免对无关交易额外读 isConfirmed/getConfirmations
@@ -136,8 +135,10 @@ export function useJNSVoteGovernance() {
       ids.forEach((id, i) => {
         const r = txResults[i]
         if (!r.result) return
-        const [destination, , data, executed] = r.result as readonly [string, bigint, string, boolean]
+        const [destination, value, data, executed] = r.result as readonly [string, bigint, string, boolean]
         if (destination.toLowerCase() !== JNSVOTE_ADDRESS.toLowerCase()) return
+        // 本链不支持原生 J 转账，携带 value > 0 的创建提案交易执行必 revert，不入列表
+        if (value !== 0n) return
         if (!data || data === '0x' || data.slice(0, 10).toLowerCase() !== CREATE_PROPOSAL_SELECTOR) return
         // selector 已匹配，但参数可能畸形；解码失败则不入列表（无法确认是合法创建提案）
         try {

@@ -127,6 +127,10 @@ async function handleConfirm(tx: PendingProposalTx) {
 
 async function handleExecute(tx: PendingProposalTx) {
   if (txBusyId.value !== null) return
+  if (isTxExpired(tx)) {
+    message.error('该交易的开始区块已过去，执行将生成无法投票的提案')
+    return
+  }
   txBusyId.value = tx.txId
   try {
     await gov.executeTx(tx.txId)
@@ -141,6 +145,14 @@ async function handleExecute(tx: PendingProposalTx) {
 
 function shortAddr(a: string): string {
   return a.length > 10 ? `${a.slice(0, 6)}…${a.slice(-4)}` : a
+}
+
+// 执行端同源风险（审计后续建议）：一笔早已提交、近日才凑够 2/3 确认的 pending 交易，
+// 其 timeBegin 可能已过去。此时执行会在链上成功生成提案，但 vote() 恒 revert（block.number
+// > timeBegin 不满足），且 modify/disable/reenable 都要求 block < timeBegin，无法补救。
+// 因此在执行按钮上叠加「开始区块须晚于当前区块」校验，过期则禁用并提示。
+function isTxExpired(tx: PendingProposalTx): boolean {
+  return currentBlock.value > 0n && tx.timeBegin <= currentBlock.value
 }
 
 // 地址 → 显示名。
@@ -245,6 +257,9 @@ watch(
           <div class="gov-tx-confirmers">
             已确认：<span v-for="c in tx.confirmations" :key="c" class="gov-signer">{{ signerName(c) }}</span>
           </div>
+          <div v-if="isTxExpired(tx)" class="gov-tx-expired">
+            ⚠️ 该交易的开始区块已过去（#{{ tx.timeBegin.toString() }}），执行将生成无法投票的提案
+          </div>
           <div class="gov-tx-actions">
             <NButton
               v-if="!tx.confirmed && !tx.confirmations.includes((walletStore.address || '').toLowerCase())"
@@ -262,7 +277,7 @@ watch(
               size="small"
               type="success"
               :loading="txBusyId === tx.txId"
-              :disabled="txBusyId !== null && txBusyId !== tx.txId"
+              :disabled="(txBusyId !== null && txBusyId !== tx.txId) || isTxExpired(tx)"
               @click="handleExecute(tx)"
             >
               执行（创建提案）
@@ -362,6 +377,11 @@ watch(
   padding: 1px 8px;
   border-radius: 6px;
   background: var(--jv-bg-subtle, #f1f5f9);
+}
+.gov-tx-expired {
+  font-size: 12px;
+  color: var(--jv-warning, #d97706);
+  margin: 6px 0;
 }
 .gov-tx-actions {
   display: flex;
