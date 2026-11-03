@@ -14,6 +14,7 @@ import JNSVoteProposalDetail from '../views/JNSVoteProposalDetail.vue'
 import JnsDomains from '../views/JnsDomains.vue'
 
 const routes = [
+  { path: '/tools/integration', name: 'networkReadiness', component: () => import('../views/NetworkReadiness.vue') },
   {
     path: '/',
     name: 'home',

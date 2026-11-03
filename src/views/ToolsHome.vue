@@ -63,6 +63,15 @@
       </div>
     </section>
 
+    <section class="tools-category">
+      <h2 class="category-title">🧩 生态接入</h2>
+      <div class="tools-grid"><router-link to="/tools/integration" class="tool-card">
+        <h3 class="tool-card-title">生态接入验收</h3>
+        <p class="tool-desc">统一接入清单、固定预算的只读能力检测与记录导出。</p>
+        <span class="tool-link">打开 →</span>
+      </router-link></div>
+    </section>
+
     <!-- 通用工具 -->
     <section class="tools-category">
       <h2 class="category-title">
