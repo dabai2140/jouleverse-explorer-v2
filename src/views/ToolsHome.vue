@@ -63,6 +63,17 @@
       </div>
     </section>
 
+    <section class="tools-category">
+      <h2 class="category-title">🔎 生态接入核验</h2>
+      <div class="tools-grid">
+        <router-link to="/tools/receipt" class="tool-card">
+          <h3 class="tool-card-title">交易核验与导出</h3>
+          <p class="tool-desc">核对链上交易记录的一致性，导出可供人工、业务系统和智能体复用的查询结果。</p>
+          <span class="tool-link">打开核验 →</span>
+        </router-link>
+      </div>
+    </section>
+
     <!-- 通用工具 -->
     <section class="tools-category">
       <h2 class="category-title">

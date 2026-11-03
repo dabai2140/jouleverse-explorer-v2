@@ -14,6 +14,7 @@ import JNSVoteProposalDetail from '../views/JNSVoteProposalDetail.vue'
 import JnsDomains from '../views/JnsDomains.vue'
 
 const routes = [
+  { path: '/tools/receipt', name: 'receiptVerifier', component: () => import('../views/ReceiptVerifier.vue') },
   {
     path: '/',
     name: 'home',
