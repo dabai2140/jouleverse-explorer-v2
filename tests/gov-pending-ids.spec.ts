@@ -222,6 +222,18 @@ describe('治理待执行交易编号回归', () => {
     }))
   })
 
+  it('executeTx 对已执行（executed=true）的交易直接阻断，不重复触链', async () => {
+    const valid = proposal(5n)
+    // 目标/value/selector 都合法，但链上已 executed=true
+    arrange(1n, [1n], new Map([[5n, [JNSVOTE_ADDRESS, 0n, valid[2], true] as StoredTx]]))
+    mocks.writeContract.mockResolvedValue('0xhash')
+    mocks.waitForTransactionReceipt.mockResolvedValue({ status: 'success' })
+    const governance = useJNSVoteGovernance()
+
+    await expect(governance.executeTx(5)).rejects.toThrow('已被执行')
+    expect(mocks.writeContract).not.toHaveBeenCalled()
+  })
+
   it('getConfirmations 读取失败时，交易标记为「确认状态未知」而非「零确认」', async () => {
     arrange(1n, [0n], new Map(), { getConfirmationsFail: true })
     const governance = useJNSVoteGovernance()

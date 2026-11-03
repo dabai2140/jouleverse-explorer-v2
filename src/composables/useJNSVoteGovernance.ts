@@ -281,7 +281,10 @@ export function useJNSVoteGovernance() {
       functionName: 'transactions',
       args: [BigInt(txId)],
     })
-    const [destination, value, data] = tx as readonly [string, bigint, string, boolean]
+    const [destination, value, data, executed] = tx as readonly [string, bigint, string, boolean]
+    if (executed) {
+      throw new Error('该交易已被执行，请刷新列表')
+    }
     if (destination.toLowerCase() !== JNSVOTE_ADDRESS.toLowerCase() || value !== 0n) {
       throw new Error('该交易不是「创建提案」类交易，已阻止执行')
     }
