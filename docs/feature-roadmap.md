@@ -42,13 +42,22 @@
 | 27 | JNSVote 提案详情页 | ✅ 已完成 | `JNSVoteProposalDetail.vue` | `/jnsvote/:id` 路由；组件 2026-10-17 commit 145fdbb 落地，路由接线 commit a5d3d76 于 2026-10-20 合入（已核 `git merge-base --is-ancestor a5d3d76 upstream/explorer-v2` 为真） |
 | 28 | JNS 域名总览页 | ✅ 已完成 | `JnsDomains.vue` | `/domains` 路由，域名总览 + i18n + smoke 用例（2026-10-16，commit 86d1553；2026-10-19 commit 0b4ad5c 收敛为中文单语种） |
 | 29 | JNSVote 治理端（创建提案） | ✅ 已完成 | `JNSVoteGovernancePanel.vue` + `composables/useJNSVoteGovernance.ts` | 多签签名人专属（`v-if="isSigner"`），Gnosis 2/3 多签 submit → confirm → execute 三段流程；三条安全边界（列表过滤 / RPC 前置短路 / 防造死提案）详见 §二 P3-1；PR #62，merge ac5d8ce（2026-11-03） |
+| 30 | 生态合约注册目录 | ✅ 已完成 | `ContractRegistry.vue` + `contracts/toolbox.ts` | `/contracts`；复用本地 toolboxContracts 部署清单（12 个：核心 4 / 生态 8），搜索、分类、地址复制/跳转、合约工具入口；本页零 RPC，PR #66 |
+| 31 | 验证者 / 签名人目录 | ✅ 已完成 | `Validators.vue` + `utils/clique-signers.ts` | `/validators`；最新高度 + 最近 epoch（30000 块）检查点 extraData，未命中缓存时两次逻辑读取；60 秒缓存及并发合并；仅检查点快照，不重放后续投票、不验证 seal、不提供出块分布/在线状态，PR #66 |
 
-> **本表覆盖度自检（2026-11-03 更新，大白 💎）**：`src/views/` 下共 **16** 个视图，本表 #1–#29 已全部覆盖（0 漏项）。
-> 注：#29 是组件层（`components/` + `composables/`）而非独立视图，从 #30 起如再新增组件级模块可延续此编号。
+> **本表覆盖度自检（2026-11-03 更新，PR #66 审计补全）**：`src/views/` 下共 **18** 个视图，本表 #1–#31 已全部覆盖（0 漏项）。
+> 注：#29 是组件层（`components/` + `composables/`）而非独立视图，后续模块接续表格末尾编号；并行 PR 合入时须按实际主线顺延，不保留重复编号。
 > 复算方法：
 > ```bash
-> T=$(sed -n '14,45p' docs/feature-roadmap.md)
-> for f in src/views/*.vue; do b=$(basename "$f" .vue); echo "$T" | grep -q "$b" || echo "MISSING $b"; done
+> T=$(sed -n '/^| # |/,/^> \*\*本表覆盖度/p' docs/feature-roadmap.md)
+> missing=0
+> for f in src/views/*.vue; do
+>   b=$(basename "$f" .vue)
+>   if ! printf '%s\n' "$T" | grep -Fq "\`$b.vue\`"; then
+>     echo "MISSING $b"; missing=1
+>   fi
+> done
+> test "$missing" -eq 0
 > ```
 > 新增视图必须同步加行——历史上本表在 2026-07-28 后停更近 3 个月（缺 8 个视图），
 > 而 §二 P3-1 / §五 优先级表同期一直在记 JNSVote「✅ 全部完成」，两份清单互相矛盾却无人发现。
@@ -151,7 +160,7 @@
   三条安全边界（均有实测依据，后续改动不得回退）：
   1. **列表过滤**：只保留 `destination === JNSVote` 且 `selector === createProposal(0x6b5e1766)` 且 `value === 0` 且可成功解码的待执行交易。否则会把多签里积压的 WJ 提现等交易误展示成「创建提案」并可被误执行。实测（2026-11-03）：多签 pending 30 笔（26 笔目标 `0xf8AbF36B` + 4 笔 WJ 提现每笔 1 J），过滤后命中 0 笔。
   2. **RPC 零负担**：`isOwner` 前置短路——非签名人 1 次 call 即返回，不触发后续扫描；签名人亦只对过滤后少数交易读确认状态。
-  3. **防造死提案**：`timeBegin > currentBlock` 在表单端 + 执行端双层硬校验。合约侧 `vote()` 要求 `block.number > timeBegin`，而 `modifyProposal`/`disableProposal`/`reenableProposal` 全都要求 `block.number < timeBegin`——即 `timeBegin` 一旦过去，提案**永久无法投票且永久无法修复**（`docs/reference/jnsvote/jns_vote.sol` L1408-1432 已核）。
+  3. **防造死提案**：`timeBegin > currentBlock` 在表单端 + 执行端双层硬校验。合约侧 `vote()` 要求 `timeBegin < block.number < timeEnd`；`disableProposal` / `reenableProposal` 检查链上原 `timeBegin`，开始后不可执行。注意 `modifyProposal` 检查的是入参的新 `timeBegin`，不能据此声称合约禁止修改已开始提案（见 `docs/reference/jnsvote/jns_vote.sol`）。若产品要求“开始后不可修改”，三操作后续实现须在提交端和执行端独立复核链上原开始高度；本 PR #66 不涉及治理写操作。
 
   已知非阻塞瑕疵（后续可改）：① `executeTx(txId)` 在 composable 层不校验 txId 归属（当前唯一调用点已过滤，安全；属防御深度缺口）；② `getConfirmations` 读取失败时静默降级为空数组，已确认过的签名人仍看到「确认」按钮，点击会 revert；③ `isTxExpired` 用 `<=`，`timeBegin == currentBlock` 时其实下一块即可投票，被偏保守禁掉。
 
@@ -366,3 +375,8 @@ src/design-system/
 ---
 
 *最后更新：2026-11-03（大白 💎）—— 同步 11-03 合并后状态：#60/#61/#62 全部合入（merge aac3548 / 6b7cb27 / ac5d8ce），测试基线 22 → 29 passed（+7，PR #62 多签治理端用例），补记计数口径提醒（`npm test` = vitest + node:test）*
+
+
+### PR #66 审计补全（2026-11-03）
+
+新增两个只读目录已登记到 §一；本分支共 18 个视图、模块编号 1–31。覆盖度脚本改为按表头/自检标记提取，避免固定行号漏掉新增行；`tests/feature-roadmap.spec.ts` 自动检查视图覆盖、重复/跳号和自检数字。编号仅对应本分支，#65/#67 等并行 PR 合入时须保留条目并按主线末尾顺延，同步实际视图数。检查点名单仅代表该高度的节点响应快照，不代表实时授权集合、节点在线、seal 已验证或逐块出块者。
