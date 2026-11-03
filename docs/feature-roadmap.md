@@ -35,7 +35,7 @@
 | 20 | JNS 域名操作 | ✅ 已完成 | `JNSQuery.vue`（钱包操作面板） | 绑定/解绑/发送J + 钱包连接 + B32支持（2026-07-28，commit 406a0fa 实改 `src/views/JNSQuery.vue` L126-215；无独立 JNSOperations.vue） |
 | 21 | 区块列表页 | ✅ 已完成 | `Blocks.vue` | `/blocks` 路由，区块号搜索 + 刷新（2026-03-20，commit bc33ed0；首页 `Home.vue` 之外另有独立列表页） |
 | 22 | 全网签到统计页 | ✅ 已完成 | `CoreCheckinStats.vue` | `/core/checkin` 路由，Naive UI 设计系统首批页面（2026-06-27，commit f6a09ff，PR#2） |
-| 23 | 工具集入口页 | ✅ 已完成 | `ToolsHome.vue` | `/tools` 路由，卡片式分类入口，未迁移工具外链 v1（2026-08-01，commit 0325566，PR#8；「即将推出」分区仅剩数据分析面板/多签钱包管理） |
+| 23 | 工具集入口页 | ✅ 已完成 | `ToolsHome.vue` | `/tools` 路由，卡片式分类入口，未迁移工具外链 v1（2026-08-01，commit 0325566，PR#8；本分支将数据分析面板/多签管理改为可点击内页） |
 | 24 | 合约交互通用工具 | ✅ 已完成 | `ContractToolView.vue` + `contracts/toolbox.ts` | `/tools/contract/:key` 路由，toolbox 注册表驱动 **12** 个合约（core 4 / eco 8），PR#9（66aa9af）2026-08-03 + 交易监听/WS 推送 PR#10（2026-08-04） |
 | 25 | 默克尔证明生成器 | ✅ 已完成 | `MerkleProofGenerator.vue` | `/tools/merkle` 路由，OZ v1.0.8 兼容算法（viem 重写），root/proof 已对官方库验证（2026-08-05，commit 66b1417） |
 | 26 | JNSVote 治理投票（列表） | ✅ 已完成 | `JNSVote.vue` | `/jnsvote` 路由，提案列表 + SBT 徽章 + 资格校验（JTI + JNS 持仓）；2026-08-14 commit 7b1b813（PR#15）起迭代，2026-10-22 全模块收尾（详见 §二 P3-1） |
@@ -43,11 +43,14 @@
 | 28 | JNS 域名总览页 | ✅ 已完成 | `JnsDomains.vue` | `/domains` 路由，域名总览 + i18n + smoke 用例（2026-10-16，commit 86d1553；2026-10-19 commit 0b4ad5c 收敛为中文单语种） |
 | 29 | JNSVote 治理端（创建提案） | ✅ 已完成 | `JNSVoteGovernancePanel.vue` + `composables/useJNSVoteGovernance.ts` | 多签签名人专属（`v-if="isSigner"`），Gnosis 2/3 多签 submit → confirm → execute 三段流程；三条安全边界（列表过滤 / RPC 前置短路 / 防造死提案）详见 §二 P3-1；PR #62，merge ac5d8ce（2026-11-03） |
 
-> **本表覆盖度自检（2026-11-03 更新，大白 💎）**：`src/views/` 下共 **16** 个视图，本表 #1–#29 已全部覆盖（0 漏项）。
+| 30 | 近期数据分析面板 | 本分支实现，待审核发布 | `Analytics.vue` | `/tools/analytics`；12/24个区块有界样本、缓存，无全链日志扫描 |
+| 31 | 通用经典多签管理 | 本分支实现，待审核发布 | `Multisig.vue` | `/tools/multisig`；任意兼容地址、分页、审阅、发送前复核 |
+
+> **本表覆盖度自检（2026-11-03 更新，大白 💎）**：`src/views/` 下共 **18** 个视图，本表 #1–#31 已全部覆盖（0 漏项）。
 > 注：#29 是组件层（`components/` + `composables/`）而非独立视图，从 #30 起如再新增组件级模块可延续此编号。
 > 复算方法：
 > ```bash
-> T=$(sed -n '14,45p' docs/feature-roadmap.md)
+> T=$(sed -n '/^| # |/,/^> \*\*本表覆盖度/p' docs/feature-roadmap.md)
 > for f in src/views/*.vue; do b=$(basename "$f" .vue); echo "$T" | grep -q "$b" || echo "MISSING $b"; done
 > ```
 > 新增视图必须同步加行——历史上本表在 2026-07-28 后停更近 3 个月（缺 8 个视图），
@@ -67,7 +70,7 @@
 - **对比 v1**：v1 使用本地 Web3.js 文件 + 不做主动切链，因此正常工作。
 - **修复方案**：① 将 Web3.js 改为本地托管文件；② `wallet_addEthereumChain` 错误处理改为宽松判断（不只依赖 4902）。
 - **状态**：⏸ 待处理（记录于 2026-06-28）
-- **源码位置**：待确认（不在当前 explorer-v2 仓库内）
+- **源码位置**：候选 `i29/JVCore-CheckIn`（不在当前仓库）；2026-11-03读取正式站点入口，与候选提交 `8e30541` 的 `index.html` SHA-256逐字节一致。兼容修复在候选仓库准备；仍需教链/维护者确认正式提交与发布位置、完成欧易手机实机验收，故本项未标记已上线。
 
 #### ✅ P0-1：地址交易历史 getLogs 重构（已完成，2026-07-25）
 - **方案**：改用 `getLogs` 按年查询 Transfer 事件
