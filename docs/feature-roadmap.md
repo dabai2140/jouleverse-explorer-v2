@@ -41,11 +41,13 @@
 | 26 | JNSVote 治理投票（列表） | ✅ 已完成 | `JNSVote.vue` | `/jnsvote` 路由，提案列表 + SBT 徽章 + 资格校验（JTI + JNS 持仓）；2026-08-14 commit 7b1b813（PR#15）起迭代，2026-10-22 全模块收尾（详见 §二 P3-1） |
 | 27 | JNSVote 提案详情页 | ✅ 已完成 | `JNSVoteProposalDetail.vue` | `/jnsvote/:id` 路由；组件 2026-10-17 commit 145fdbb 落地，路由接线 commit a5d3d76 于 2026-10-20 合入（已核 `git merge-base --is-ancestor a5d3d76 upstream/explorer-v2` 为真） |
 | 28 | JNS 域名总览页 | ✅ 已完成 | `JnsDomains.vue` | `/domains` 路由，域名总览 + i18n + smoke 用例（2026-10-16，commit 86d1553；2026-10-19 commit 0b4ad5c 收敛为中文单语种） |
+| 29 | JNSVote 治理端（创建提案） | ✅ 已完成 | `JNSVoteGovernancePanel.vue` + `composables/useJNSVoteGovernance.ts` | 多签签名人专属（`v-if="isSigner"`），Gnosis 2/3 多签 submit → confirm → execute 三段流程；三条安全边界（列表过滤 / RPC 前置短路 / 防造死提案）详见 §二 P3-1；PR #62，merge ac5d8ce（2026-11-03） |
 
-> **本表覆盖度自检（2026-11-01，大白 💎 补 #21–#28 并加此节）**：`src/views/` 下共 **16** 个视图，本表 #1–#28 已全部覆盖（0 漏项）。
+> **本表覆盖度自检（2026-11-03 更新，大白 💎）**：`src/views/` 下共 **16** 个视图，本表 #1–#29 已全部覆盖（0 漏项）。
+> 注：#29 是组件层（`components/` + `composables/`）而非独立视图，从 #30 起如再新增组件级模块可延续此编号。
 > 复算方法：
 > ```bash
-> T=$(sed -n '14,44p' docs/feature-roadmap.md)
+> T=$(sed -n '14,45p' docs/feature-roadmap.md)
 > for f in src/views/*.vue; do b=$(basename "$f" .vue); echo "$T" | grep -q "$b" || echo "MISSING $b"; done
 > ```
 > 新增视图必须同步加行——历史上本表在 2026-07-28 后停更近 3 个月（缺 8 个视图），
@@ -132,6 +134,7 @@
   - 投票详情页（站内）✅ 已完成（路由 + 卡片跳转已接线，2026-10-20 commit a5d3d76）
   - 投票写操作（钱包签名）✅ 已完成
   - 投票进度展示（实时更新）✅ 已完成
+  - 治理端创建提案入口（多签签名人专属）✅ 已完成（PR #62，merge ac5d8ce，2026-11-03）
 - **复杂度**：极高，建议单独规划一轮迭代
 - **合约**：需要获取 JNSVote 合约 ABI 和地址（v1 中的 `JNSVote.sol`）
 - **参考**：v1 `views/jnsVote*.html` 系列
@@ -142,6 +145,15 @@
   - ✅ 资格校验 checkEligibility（JTI + JNS 持仓，`useJNSVote.ts` L270-295）
   - ✅ 提案详情页（站内）：已完整接线（commit a5d3d76，2026-10-20 合入 explorer-v2）——`router/index.ts` 有 `/jnsvote/:id` 路由、`JNSVote.vue` 提案卡片 `@click` 跳转、`JNSVoteProposalDetail.vue` 组件三个入口齐备（核实方式：`git merge-base --is-ancestor a5d3d76 upstream/explorer-v2` 为真，且构建产物 `dist/assets/index-*.js` 内含 `jnsvoteProposalDetail` 路由名）
 - **状态**：✅ P3-1 全部子功能已完成，展示层收尾亦已闭环——`/tools` 工具集页的 JNSVote 卡片已从「即将推出」分区移出、改为可点击卡片（PR #48，commit bfb29a8，2026-10-22 合入）；核实方式：`src/views/ToolsHome.vue:157-169` 为 `router-link to="/jnsvote"` 且标注「已迁移」，而「即将推出」分区（L173 起）仅剩「数据分析面板」「多签钱包管理」两项
+
+  **治理端（2026-11-03 补齐，PR #62）**：`createProposal` 是 `onlyOwner`，owner = 2/3 多签 `0x4eF599b6E39D950D6Ddbd830fF5f95e06770C1B3`（签名人 Koant J-0 / 剪云为裳 J-37 / 明海云 J-7）。此前前端只有「投票端」，签名人无创建入口。现新增 `JNSVoteGovernancePanel.vue` + `useJNSVoteGovernance.ts` + `contracts/jnsvoteGovernance.ts`，`v-if="isSigner"` 门控。
+
+  三条安全边界（均有实测依据，后续改动不得回退）：
+  1. **列表过滤**：只保留 `destination === JNSVote` 且 `selector === createProposal(0x6b5e1766)` 且 `value === 0` 且可成功解码的待执行交易。否则会把多签里积压的 WJ 提现等交易误展示成「创建提案」并可被误执行。实测（2026-11-03）：多签 pending 30 笔（26 笔目标 `0xf8AbF36B` + 4 笔 WJ 提现每笔 1 J），过滤后命中 0 笔。
+  2. **RPC 零负担**：`isOwner` 前置短路——非签名人 1 次 call 即返回，不触发后续扫描；签名人亦只对过滤后少数交易读确认状态。
+  3. **防造死提案**：`timeBegin > currentBlock` 在表单端 + 执行端双层硬校验。合约侧 `vote()` 要求 `block.number > timeBegin`，而 `modifyProposal`/`disableProposal`/`reenableProposal` 全都要求 `block.number < timeBegin`——即 `timeBegin` 一旦过去，提案**永久无法投票且永久无法修复**（`docs/reference/jnsvote/jns_vote.sol` L1408-1432 已核）。
+
+  已知非阻塞瑕疵（后续可改）：① `executeTx(txId)` 在 composable 层不校验 txId 归属（当前唯一调用点已过滤，安全；属防御深度缺口）；② `getConfirmations` 读取失败时静默降级为空数组，已确认过的签名人仍看到「确认」按钮，点击会 revert；③ `isTxExpired` 用 `<=`，`timeBegin == currentBlock` 时其实下一块即可投票，被偏保守禁掉。
 
 ---
 
@@ -222,10 +234,14 @@
 | `tests/` 纳入 typecheck | 新增 `tsconfig.test-vitest.json`（spec + setup + vitest.config）/ `tsconfig.test-node.json`（`jvaddress.test.ts`，node:test + 原生 strip-types），根 `tsconfig.json` references 追加两者 | ✅ 已合入 | PR #53（c2c6149）|
 | mock 归因注释修正 | 查明真根因是 **jsdom 30.1.3 全包 0 处 `matchMedia` 实现**（非 node 版本差异、非 npm/pnpm 布局差异）；此前 CI 未暴露是因**无 spec 覆盖该路径**（覆盖盲区），非环境差异 | ✅ 已合入 | PR #54（8984455）|
 | theme store 冒烟用例 | `tests/theme-store.spec.ts` 9 条（初始化 2 / 三态 4 / 写操作 2 / `$dispose` 清理 1），前两条初始化用例**不自装 mock**，完全依赖 `setup.ts` | ✅ 已合入 | PR #56（dd192ab → merge 20a19cc）|
+| 多签治理端待执行交易编号 | `tests/gov-pending-ids.spec.ts` 7 条（id=0 保留 / 混合编号顺序 / 补齐位截断 / 非零编号不变 / 目标+selector 双重过滤 / pending=0 清空 / value>0 过滤），只 mock 合约读取，编解码走真实实现 | ✅ 已合入 | PR #62（08a5734…4b9b3cb → merge ac5d8ce）|
 
-**当前基线**（`explorer-v2` 分支 `e0cf7f5`，2026-10-30 实测）：`npm run build` EXIT 0 / `vitest run` **22 passed**（3 files）/ `node --test tests/jvaddress.test.ts` **3 passed**。
+**当前基线**（`explorer-v2` 分支 `ac5d8ce`，2026-11-03 实测）：`npm run build` EXIT 0 / `vitest run` **29 passed**（4 files）/ `node --test tests/jvaddress.test.ts` **3 passed**。
 
-> PR #56 合入后基线已从 13 升到 **22**（+9，即 theme store 9 条真生效）。上表四项现全部为「已合入」，**2026-10-30 这批（#57/#58/#56/#59）已全部 merge，open PR/Issue 归零**。
+> 基线演进：13（PR #51~#54 前）→ **22**（PR #56 theme store 9 条）→ **29**（PR #62 gov-pending-ids 7 条）。
+> 上表五项现全部为「已合入」。**2026-10-30 这批（#57/#58/#56/#59）与 2026-11-03 这批（#60/#61/#62）均已全部 merge**，截至 2026-11-03 open PR/Issue 归零。
+>
+> ⚠️ 计数口径提醒：`npm test` = vitest 29 + node:test 3 = **32 条**。写 PR 描述或文档时别只抄 vitest 数字又说「npm test N passed」——PR #62 描述里写「vitest 22 passed」就是这个错（当时实际已是 29）。
 
 **两条必须记住的规则**：
 
@@ -349,4 +365,4 @@ src/design-system/
 
 ---
 
-*最后更新：2026-10-31（大白 💎）—— 同步 10-30 合并后状态：四项质量基础设施全部「已合入」、测试基线 13 → 22 passed、补记 RPC 无端口端点配置（PR #59）*
+*最后更新：2026-11-03（大白 💎）—— 同步 11-03 合并后状态：#60/#61/#62 全部合入（merge aac3548 / 6b7cb27 / ac5d8ce），测试基线 22 → 29 passed（+7，PR #62 多签治理端用例），补记计数口径提醒（`npm test` = vitest + node:test）*
