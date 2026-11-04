@@ -17,11 +17,13 @@ export function checkRoadmap(markdown: string, viewFiles: readonly string[]): Ro
   const marker = section.indexOf('> **本表覆盖度自检')
   if (marker < 0) errors.push('覆盖度自检标记缺失')
   else if (section.indexOf('> **本表覆盖度自检', marker + 1) >= 0) errors.push('覆盖度自检标记重复')
-  const beforeMarker = marker < 0 ? '' : section.slice(0, marker)
-  const tables = beforeMarker.split(/^\| # \| 功能模块 \| 状态 \| 实现位置 \| 备注 \|\s*$/m)
+  const beforeMarker = (marker < 0 ? '' : section.slice(0, marker)).replace(/\r\n/g, '\n')
+  const tables = beforeMarker.split(/^\| # \| 功能模块 \| 状态 \| 实现位置 \| 备注 \|[ \t]*$/m)
   if (tables.length !== 2) errors.push('状态总览表头缺失或重复')
-  const lines = (tables[1] ?? '').trim().split(/\r?\n/)
-  if (!/^\|[-\s|]+\|$/.test(lines[0] ?? '')) errors.push('表格分隔行无效')
+  const lines = (tables[1] ?? '').replace(/^\n/, '').split('\n')
+  const separatorLine = (lines[0] ?? '').trim()
+  const separators = separatorLine.split('|').slice(1, -1)
+  if (!separatorLine.startsWith('|') || !separatorLine.endsWith('|') || separators.length !== 5 || separators.some(cell => !/^:?-{3,}:?$/.test(cell.trim()))) errors.push('表格分隔行无效')
   const rows: { id: number; content: string }[] = []
   let ended = false
   for (const line of lines.slice(1)) {
@@ -33,16 +35,18 @@ export function checkRoadmap(markdown: string, viewFiles: readonly string[]): Ro
   }
   if (!rows.length) errors.push('状态总览没有模块')
   if (rows.some((row, i) => row.id !== i + 1)) errors.push('模块编号必须从 1 连续且唯一')
-  const listedFiles = new Set(rows.flatMap(row => [...row.content.matchAll(/`([A-Za-z0-9_./-]+\.vue)`/g)].map(m => m[1]!.split('/').at(-1))))
+  const listedFiles = new Set(rows.flatMap(row =>
+    [...row.content.matchAll(/`([A-Za-z0-9_./-]+\.vue)`/g)].map(match => match[1]!),
+  ))
   for (const file of viewFiles) {
-    if (!listedFiles.has(file)) errors.push(`MISSING ${file}`)
+    if (!listedFiles.has(file) && !listedFiles.has(`src/views/${file}`)) errors.push(`MISSING ${file}`)
   }
   const summary = marker < 0 ? '' : section.slice(marker).split(/\r?\n/, 1)[0]!
   const views = /共 \*\*(\d+)\*\* 个视图/.exec(summary)
   const modules = /本表 #1–#(\d+)/.exec(summary)
   if (!views || Number(views[1]) !== viewFiles.length) errors.push('自检视图数与 src/views 不一致')
   if (!modules || Number(modules[1]) !== rows.length) errors.push('自检末尾编号与实际模块数不一致')
-  if (!summary.includes('0 漏项')) errors.push('自检声明格式缺少 0 漏项')
+  if (!/[（(]0 漏项[）)]/.test(summary)) errors.push('自检声明格式缺少 0 漏项')
   return { errors, viewCount: viewFiles.length, moduleCount: rows.length }
 }
 

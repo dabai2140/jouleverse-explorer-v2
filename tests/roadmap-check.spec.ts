@@ -35,6 +35,26 @@ it.each([
 ] as const)('%s 应失败', (_, doc, files) => {
   expect(checkRoadmap(doc, files).errors.length).toBeGreaterThan(0)
 })
+it.each([
+  ['表头后空行', valid.replace('|---|', '\n|---|')],
+  ['十个漏项', valid.replace('0 漏项', '10 漏项')],
+  ['非零小数漏项', valid.replace('0 漏项', '1.0 漏项')],
+  ['错误目录同名', valid.replace('`Home.vue`', '`src/components/Home.vue`')],
+  ['路径穿越', valid.replace('`Home.vue`', '`src/views/../components/Home.vue`')],
+  ['分隔行缺左竖线', valid.replace('|---|---------|------|---------|------|', '---|---------|------|---------|------|')],
+  ['分隔行缺右竖线', valid.replace('|---|---------|------|---------|------|', '|---|---------|------|---------|------')],
+  ['分隔行带多余文字', valid.replace('|---|---------|------|---------|------|', 'x|---|---------|------|---------|------|x')],
+  ['分隔列不足', valid.replace('|---|---------|------|---------|------|', '|---|---|')],
+  ['分隔列过多', valid.replace('|---|---------|------|---------|------|', '|---|---|---|---|---|---|')],
+])('%s 不能假绿', (_, doc) => {
+  expect(checkRoadmap(doc, ['Home.vue']).errors.length).toBeGreaterThan(0)
+})
+it.each([
+  ['合法对齐', valid.replace('|---|---------|------|---------|------|', '|:---|---:|:---:|---|---|')],
+  ['Windows换行', valid.replace(/\n/g, '\r\n')],
+])('%s 应通过', (_, doc) => {
+  expect(checkRoadmap(doc, ['Home.vue']).errors).toEqual([])
+})
 it('真实命令对缺文件、空视图和遗漏返回非零，对正常仓库返回零', () => {
   const dir = mkdtempSync(resolve(tmpdir(), 'roadmap-cli-'))
   const command = (root: string) => spawnSync(process.execPath, ['scripts/check-feature-roadmap.ts', root], { encoding: 'utf8' })
