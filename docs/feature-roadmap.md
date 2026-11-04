@@ -42,10 +42,10 @@
 | 27 | JNSVote 提案详情页 | ✅ 已完成 | `JNSVoteProposalDetail.vue` | `/jnsvote/:id` 路由；组件 2026-10-17 commit 145fdbb 落地，路由接线 commit a5d3d76 于 2026-10-20 合入（已核 `git merge-base --is-ancestor a5d3d76 upstream/explorer-v2` 为真） |
 | 28 | JNS 域名总览页 | ✅ 已完成 | `JnsDomains.vue` | `/domains` 路由，域名总览 + i18n + smoke 用例（2026-10-16，commit 86d1553；2026-10-19 commit 0b4ad5c 收敛为中文单语种） |
 | 29 | JNSVote 治理端（创建提案） | ✅ 已完成 | `JNSVoteGovernancePanel.vue` + `composables/useJNSVoteGovernance.ts` | 多签签名人专属（`v-if="isSigner"`），Gnosis 2/3 多签 submit → confirm → execute 三段流程；三条安全边界（列表过滤 / RPC 前置短路 / 防造死提案）详见 §二 P3-1；PR #62，merge ac5d8ce（2026-11-03） |
-| 30 | 生态接入验收 | 🚧 本分支完成，待审未上线 | `NetworkReadiness.vue` + `services/network-readiness.ts` | `/tools/integration`；本地清单导出、最多8次只读请求、能力边界明确；详见network-readiness.md |
+| 35 | 生态接入验收 | 🚧 本分支完成，待审未上线 | `NetworkReadiness.vue` + `services/network-readiness.ts` | `/tools/integration`；本地清单导出、最多8次只读请求、能力边界明确；详见network-readiness.md |
 
-> **本表覆盖度自检（2026-11-03 本分支复算）**：`src/views/` 下共 **17** 个视图，本表 #1–#30 已全部覆盖（0 漏项）。
-> 注：#29 是组件层（`components/` + `composables/`）而非独立视图，从 #31 起如再新增组件级模块可延续此编号。
+> **本表覆盖度自检（2026-11-03 本分支复算）**：`src/views/` 下共 **17** 个视图，本表 #1–#35 已全部覆盖（0 漏项）。
+> 注：#29 是组件层（`components/` + `composables/`）而非独立视图，从 #36 起如再新增组件级模块可延续此编号。
 > 复算方法：
 > ```bash
 > T=$(sed -n '/^| # |/,/^> \*\*本表覆盖度/p' docs/feature-roadmap.md)
