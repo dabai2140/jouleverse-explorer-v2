@@ -53,15 +53,7 @@
 > 注：#29 是组件层（`components/` + `composables/`）而非独立视图，从 #36 起如再新增组件级模块可延续此编号。
 > 复算方法：
 > ```bash
-> T=$(sed -n '/^| # |/,/^> \*\*本表覆盖度/p' docs/feature-roadmap.md)
-> missing=0
-> for f in src/views/*.vue; do
->   b=$(basename "$f" .vue)
->   if ! printf '%s\n' "$T" | grep -Fq "\`$b.vue\`"; then
->     echo "MISSING $b"; missing=1
->   fi
-> done
-> test "$missing" -eq 0
+> node scripts/check-feature-roadmap.ts
 > ```
 > 新增视图必须同步加行——历史上本表在 2026-07-28 后停更近 3 个月（缺 8 个视图），
 > 而 §二 P3-1 / §五 优先级表同期一直在记 JNSVote「✅ 全部完成」，两份清单互相矛盾却无人发现。
@@ -261,7 +253,7 @@
 1. **`vue-tsc -b` 只走 `references`**，新增目录（如 `tests/`）不主动挂 project 就**永远假绿**。验证覆盖是否成立只能用**负向注入**（往目标文件写一行类型错误，看 `build` 是否变 EXIT 2），不能看「build 成功」就当覆盖了。
 2. **写测试必须做反证**：断言通过 ≠ 覆盖成立。绿可能来自 ①真的覆盖了 ②自己重复造了被测依赖（在 `beforeEach` 里自装 mock，spec 压根没依赖 `setup.ts`）③压根没执行到断言。唯一判定法是——**把你声称守护的那个依赖拿掉，看测试是否变红**。PR #56 第一版就是典型的假覆盖：9 条全绿，但摘掉 `setup.ts` 的 mock 后仍然 9 条全绿。
 
-**注意**：PR 分支**不触发 CI**（`deploy-pages.yml` 仅 `on.push: [feature/core-id-checkin, explorer-v2]`），PR 上 `check_runs: 0` / `commit status: pending` 是正常态，分支验证只能靠本地门禁。
+**合并请求自动验收（本分支新增，尚未上线）**：`pr-validation.yml` 对目标 `explorer-v2` 的合并请求执行路线图检查、`npm test` 与 `npm run build`；还支持合并队列与手动触发。只读权限、无部署步骤，不更改原 Pages 工作流。平台运行与必需状态检查仍待提交后由维护者确认；首次外部分支运行可能需要批准，不能把“无检查”当成通过。详见 `docs/pr-validation.md`。
 
 ### 设计系统接入
 
