@@ -47,9 +47,10 @@
 | 32 | 近期数据分析面板 | 🚧 本分支实现，待审核发布 | `Analytics.vue` | `/tools/analytics`；12/24个区块有界样本、缓存，无全链日志扫描 |
 | 33 | 通用经典多签管理 | 🚧 本分支实现，待审核发布 | `Multisig.vue` | `/tools/multisig`；任意兼容地址、分页、审阅、发送前复核 |
 | 34 | 链上交易核验与记录导出工具 | 🚧 本分支实现，待审未上线 | `ReceiptVerifier.vue` + `services/receipt-verifier.ts` | `/tools/receipt`；最多5个只读请求；归属一致性/重组检查；机器可读快照导出；不等于支付/履约成功，详见 `receipt-verifier.md` |
+| 35 | 生态接入验收 | 🚧 本分支完成，待审未上线 | `NetworkReadiness.vue` + `services/network-readiness.ts` | `/tools/integration`；本地清单导出、最多8次只读请求、能力边界明确；详见network-readiness.md |
 
-> **本表覆盖度自检（2026-11-03 更新，并行 PR #65/#66/#67 合入后顺延编号）**：`src/views/` 下共 **21** 个视图，本表 #1–#34 已全部覆盖（0 漏项）。
-> 注：#29 是组件层（`components/` + `composables/`）而非独立视图，从 #35 起如再新增组件级模块可延续此编号。
+> **本表覆盖度自检（2026-11-03 更新，并行 PR #65/#66/#67/#68 合入后顺延编号）**：`src/views/` 下共 **22** 个视图，本表 #1–#35 已全部覆盖（0 漏项）。
+> 注：#29 是组件层（`components/` + `composables/`）而非独立视图，从 #36 起如再新增组件级模块可延续此编号。
 > 复算方法：
 > ```bash
 > T=$(sed -n '/^| # |/,/^> \*\*本表覆盖度/p' docs/feature-roadmap.md)

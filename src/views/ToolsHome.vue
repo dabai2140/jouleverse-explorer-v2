@@ -81,6 +81,10 @@
           <p class="tool-desc">核对链上交易记录的一致性，导出可供人工、业务系统和智能体复用的查询结果。</p>
           <span class="tool-link">打开核验 →</span>
         </router-link>
+        <router-link to="/tools/integration" class="tool-card">
+          <h3 class="tool-card-title">生态接入验收</h3>
+          <p class="tool-desc">统一接入清单、固定预算的只读能力检测与记录导出。</p>
+          <span class="tool-link">打开 →</span>
         </router-link>
       </div>
     </section>
