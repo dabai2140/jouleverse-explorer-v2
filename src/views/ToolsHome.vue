@@ -64,7 +64,7 @@
     </section>
 
     <section class="tools-category">
-      <h2 class="category-title">📚 生态目录</h2>
+      <h2 class="category-title">📚 生态目录与核验</h2>
       <div class="tools-grid">
         <router-link to="/contracts" class="tool-card">
           <h3 class="tool-card-title">生态合约注册目录</h3>
@@ -75,6 +75,12 @@
           <h3 class="tool-card-title">验证者 / 签名人目录</h3>
           <p class="tool-desc">从最近 Clique 检查点解析签名人集合，非在线状态监控。</p>
           <span class="tool-link">查看目录 →</span>
+        </router-link>
+        <router-link to="/tools/receipt" class="tool-card">
+          <h3 class="tool-card-title">交易核验与导出</h3>
+          <p class="tool-desc">核对链上交易记录的一致性，导出可供人工、业务系统和智能体复用的查询结果。</p>
+          <span class="tool-link">打开核验 →</span>
+        </router-link>
         </router-link>
       </div>
     </section>
