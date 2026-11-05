@@ -36,6 +36,16 @@ const routes = [
     props: true
   },
   {
+    path: '/tools/analytics',
+    name: 'analytics',
+    component: () => import('../views/Analytics.vue')
+  },
+  {
+    path: '/tools/multisig',
+    name: 'multisig',
+    component: () => import('../views/Multisig.vue')
+  },
+  {
     path: '/tools/merkle',
     name: 'merkleProofGenerator',
     component: MerkleProofGenerator
