@@ -19,6 +19,7 @@ export function getDeploymentBaseline(address: Address): Hex | undefined {
 
 export interface DeploymentReader {
   getChainId(): Promise<number>
+  getBlock(args: { blockNumber: bigint }): Promise<{ hash: Hex | null }>
   getBlockNumber(): Promise<bigint>
   getCode(args: { address: Address; blockNumber: bigint }): Promise<Hex | undefined>
 }
@@ -26,7 +27,7 @@ export interface DeploymentReader {
 export type DeploymentResult =
   | { status: 'match' | 'mismatch' | 'unverified'; blockNumber: bigint; codeHash: Hex }
   | { status: 'no-code'; blockNumber: bigint }
-  | { status: 'wrong-chain' | 'error' }
+  | { status: 'wrong-chain' | 'baseline-mismatch' | 'error' }
 
 export async function verifyDeployment(address: Address, reader?: DeploymentReader): Promise<DeploymentResult> {
   try {
@@ -35,7 +36,15 @@ export async function verifyDeployment(address: Address, reader?: DeploymentRead
       transport: http(undefined, { timeout: 8000, retryCount: 0 }),
       cacheTime: 0,
     })
+
+    // 先验证固定基线区块仍是预期区块；失败时停止，不能继续给出代码匹配结论。
     if (await rpc.getChainId() !== jouleverseChain.id) return { status: 'wrong-chain' }
+    const baseline = await rpc.getBlock({ blockNumber: baselineBlock.number })
+    if (!baseline.hash || baseline.hash.toLowerCase() !== baselineBlock.hash.toLowerCase()) {
+      return { status: 'baseline-mismatch' }
+    }
+
+    // 再单独检查当前最新高度的运行时代码；最多 4 次只读 RPC 请求。
     const blockNumber = await rpc.getBlockNumber()
     const code = await rpc.getCode({ address, blockNumber })
     if (code === undefined || code === '0x') return { status: 'no-code', blockNumber }
