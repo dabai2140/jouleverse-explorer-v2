@@ -18,7 +18,9 @@ function walkFiles(dir: string, out: string[] = []): string[] {
   return out
 }
 
-function readModuleSpecifiers(file: string): string[] {
+function readModuleSpecifiers(file: string, cache?: Map<string, string[]>): string[] {
+  const cached = cache?.get(file)
+  if (cached) return cached
   const text = readFileSync(file, 'utf8')
   const scripts = extname(file) === '.vue'
     ? [...text.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)].map(match => match[1])
@@ -42,6 +44,7 @@ function readModuleSpecifiers(file: string): string[] {
     }
     visit(source)
   }
+  cache?.set(file, imports)
   return imports
 }
 
@@ -63,10 +66,13 @@ export function findOrphanViews(repositoryRoot: string): string[] {
   const viewsDir = resolve(srcDir, 'views')
   const views = walkFiles(viewsDir).filter(file => extname(file) === '.vue')
   const sources = walkFiles(srcDir)
+  // AST 解析是热点：每个源文件只解析一次，避免「视图数 × 源文件数」次重复解析。
+  // 不缓存时 22 视图 × 80 源文件 ≈ 1760 次解析，全量跑会超过默认 5s 超时。
+  const cache = new Map<string, string[]>()
 
   return views
     .filter(view => !sources.some(source => source !== view &&
-      readModuleSpecifiers(source).some(specifier =>
+      readModuleSpecifiers(source, cache).some(specifier =>
         resolvesToView(specifier, source, srcDir, view))))
     .map(view => relative(repositoryRoot, view).split('\\').join('/'))
     .sort()
