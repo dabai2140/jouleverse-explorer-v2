@@ -240,13 +240,15 @@
 | mock 归因注释修正 | 查明真根因是 **jsdom 30.1.3 全包 0 处 `matchMedia` 实现**（非 node 版本差异、非 npm/pnpm 布局差异）；此前 CI 未暴露是因**无 spec 覆盖该路径**（覆盖盲区），非环境差异 | ✅ 已合入 | PR #54（8984455）|
 | theme store 冒烟用例 | `tests/theme-store.spec.ts` 9 条（初始化 2 / 三态 4 / 写操作 2 / `$dispose` 清理 1），前两条初始化用例**不自装 mock**，完全依赖 `setup.ts` | ✅ 已合入 | PR #56（dd192ab → merge 20a19cc）|
 | 多签治理端待执行交易编号 | `tests/gov-pending-ids.spec.ts` 7 条（id=0 保留 / 混合编号顺序 / 补齐位截断 / 非零编号不变 / 目标+selector 双重过滤 / pending=0 清空 / value>0 过滤），只 mock 合约读取，编解码走真实实现 | ✅ 已合入 | PR #62（08a5734…4b9b3cb → merge ac5d8ce）|
+| 路由可达性门禁加固 | 2026-11-09 审计实测盲区：`route-gap.spec.ts` 只查「有无引用」不查「从入口可达」，删掉路由 + 加一个死模块引用即可全绿放行。改为从 `src/main.ts` + `src/router/*` 做传递闭包 BFS，只有真正可达的视图才不算孤立；新增 2 条反向用例（死模块绕过 / 多级不可达引用链） | 🚧 本分支（待审） | `fix/gate-hardening-baseline-reachability` |
+| 部署基线常量冻结 | 2026-11-09 审计实测盲区：`deployment-verification.spec.ts` 的 reader 默认值取 `baselineBlock.hash` 再喂回被测代码，基线常量本身无守护——把 WJ 摘要末位 `…1e89` 改 `…1e88` 仍 5 passed 全绿。新增 `tests/deployment-baseline-frozen.spec.ts` 3 条，用独立副本冻结三地址摘要 + 基线块号/哈希，改基线必须双改、CR 可见 | 🚧 本分支（待审） | `fix/gate-hardening-baseline-reachability` |
 
-**当前基线**（`explorer-v2` 分支 `ac5d8ce`，2026-11-03 实测）：`npm run build` EXIT 0 / `vitest run` **29 passed**（4 files）/ `node --test tests/jvaddress.test.ts` **3 passed**。
+**当前基线**（`explorer-v2` 分支 `90b032e`，2026-11-10 实测）：`npm run build` EXIT 0（1.73s）/ `vitest run` **260 passed**（20 files）/ `node --test tests/jvaddress.test.ts` **3 passed**（合计 **263** 条）。
 
-> 基线演进：13（PR #51~#54 前）→ **22**（PR #56 theme store 9 条）→ **29**（PR #62 gov-pending-ids 7 条）。
+> 基线演进：13（PR #51~#54 前）→ **22**（PR #56 theme store 9 条）→ **29**（PR #62 gov-pending-ids 7 条）→ **260**（4 files → **20 files**，PR #64~#73 陆续补入路由可达性、合约部署核验、治理端操作等用例）。
 > 上表五项现全部为「已合入」。**2026-10-30 这批（#57/#58/#56/#59）与 2026-11-03 这批（#60/#61/#62）均已全部 merge**，截至 2026-11-03 open PR/Issue 归零。
 >
-> ⚠️ 计数口径提醒：`npm test` = vitest 29 + node:test 3 = **32 条**。写 PR 描述或文档时别只抄 vitest 数字又说「npm test N passed」——PR #62 描述里写「vitest 22 passed」就是这个错（当时实际已是 29）。
+> ⚠️ 计数口径提醒：`npm test` = vitest **260** + node:test 3 = **263 条**。写 PR 描述或文档时别只抄 vitest 数字又说「npm test N passed」——PR #62 描述里写「vitest 22 passed」就是这个错（当时实际已是 29）。本条基线在 2026-11-03 后长期滞留在「29 passed（4 files）」，实际已 260/20，落后 231 条，直至 2026-11-10 才校正；**每次大批量合入后应复跑并更新本节**，否则文档会给出错误的健康度信号。
 
 **两条必须记住的规则**：
 
@@ -370,7 +372,7 @@ src/design-system/
 
 ---
 
-*最后更新：2026-11-03（大白 💎）—— 同步 11-03 合并后状态：#60/#61/#62 全部合入（merge aac3548 / 6b7cb27 / ac5d8ce），测试基线 22 → 29 passed（+7，PR #62 多签治理端用例），补记计数口径提醒（`npm test` = vitest + node:test）*
+*最后更新：2026-11-10（大白 💎）—— 校正过期测试基线：文档长期写「vitest 29 passed（4 files）」（11-03 口径），实测已 **260 passed / 20 files**，落后 231 条，已更新基线行、演进链与口径提醒；同步 11-09 合并后状态（#71/#72/#73 合入，merge bbb071b；#74/#75 logo 修复，HEAD `90b032e`），open PR/Issue 归零。*
 
 
 ### PR #66 审计补全（2026-11-03）
