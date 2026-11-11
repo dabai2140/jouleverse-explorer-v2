@@ -44,10 +44,10 @@
 | 29 | JNSVote 治理端（创建提案） | ✅ 已完成 | `JNSVoteGovernancePanel.vue` + `composables/useJNSVoteGovernance.ts` | 多签签名人专属（`v-if="isSigner"`），Gnosis 2/3 多签 submit → confirm → execute 三段流程；三条安全边界（列表过滤 / RPC 前置短路 / 防造死提案）详见 §二 P3-1；PR #62，merge ac5d8ce（2026-11-03） |
 | 30 | 生态合约注册目录 | ✅ 已完成 | `ContractRegistry.vue` + `contracts/toolbox.ts` | `/contracts`；复用本地 toolboxContracts 部署清单（12 个：核心 4 / 生态 8），搜索、分类、地址复制/跳转、合约工具入口；默认零 RPC，支持按需只读核验单个合约；目录源自 PR #66 |
 | 31 | 验证者 / 签名人目录 | ✅ 已完成 | `Validators.vue` + `utils/clique-signers.ts` | `/validators`；最新高度 + 最近 epoch（30000 块）检查点 extraData，未命中缓存时两次逻辑读取；60 秒缓存及并发合并；仅检查点快照，不重放后续投票、不验证 seal、不提供出块分布/在线状态，PR #66 |
-| 32 | 近期数据分析面板 | 🚧 本分支实现，待审核发布 | `Analytics.vue` | `/tools/analytics`；12/24个区块有界样本、缓存，无全链日志扫描 |
-| 33 | 通用经典多签管理 | 🚧 本分支实现，待审核发布 | `Multisig.vue` | `/tools/multisig`；任意兼容地址、分页、审阅、发送前复核 |
-| 34 | 链上交易核验与记录导出工具 | 🚧 本分支实现，待审未上线 | `ReceiptVerifier.vue` + `services/receipt-verifier.ts` | `/tools/receipt`；最多5个只读请求；归属一致性/重组检查；机器可读快照导出；不等于支付/履约成功，详见 `receipt-verifier.md` |
-| 35 | 生态接入验收 | 🚧 本分支完成，待审未上线 | `NetworkReadiness.vue` + `services/network-readiness.ts` | `/tools/integration`；本地清单导出、最多8次只读请求、能力边界明确；详见network-readiness.md |
+| 32 | 近期数据分析面板 | ✅ 已完成 | `Analytics.vue` | `/tools/analytics`；12/24个区块有界样本、缓存，无全链日志扫描 |
+| 33 | 通用经典多签管理 | ✅ 已完成 | `Multisig.vue` | `/tools/multisig`；任意兼容地址、分页、审阅、发送前复核 |
+| 34 | 链上交易核验与记录导出工具 | ✅ 已完成 | `ReceiptVerifier.vue` + `services/receipt-verifier.ts` | `/tools/receipt`；最多5个只读请求；归属一致性/重组检查；机器可读快照导出；不等于支付/履约成功，详见 `receipt-verifier.md` |
+| 35 | 生态接入验收 | ✅ 已完成 | `NetworkReadiness.vue` + `services/network-readiness.ts` | `/tools/integration`；本地清单导出、最多8次只读请求、能力边界明确；详见network-readiness.md |
 
 > **本表覆盖度自检（2026-11-03 更新，并行 PR #65/#66/#67/#68 合入后顺延编号）**：`src/views/` 下共 **22** 个视图，本表 #1–#35 已全部覆盖（0 漏项）。
 > 注：#29 是组件层（`components/` + `composables/`）而非独立视图，从 #36 起如再新增组件级模块可延续此编号。
