@@ -240,13 +240,15 @@
 | mock 归因注释修正 | 查明真根因是 **jsdom 30.1.3 全包 0 处 `matchMedia` 实现**（非 node 版本差异、非 npm/pnpm 布局差异）；此前 CI 未暴露是因**无 spec 覆盖该路径**（覆盖盲区），非环境差异 | ✅ 已合入 | PR #54（8984455）|
 | theme store 冒烟用例 | `tests/theme-store.spec.ts` 9 条（初始化 2 / 三态 4 / 写操作 2 / `$dispose` 清理 1），前两条初始化用例**不自装 mock**，完全依赖 `setup.ts` | ✅ 已合入 | PR #56（dd192ab → merge 20a19cc）|
 | 多签治理端待执行交易编号 | `tests/gov-pending-ids.spec.ts` 7 条（id=0 保留 / 混合编号顺序 / 补齐位截断 / 非零编号不变 / 目标+selector 双重过滤 / pending=0 清空 / value>0 过滤），只 mock 合约读取，编解码走真实实现 | ✅ 已合入 | PR #62（08a5734…4b9b3cb → merge ac5d8ce）|
+| 路线图**状态词**一致性 | `tests/roadmap-status.spec.ts` 7 条（真实仓库 1 / 反向 3：未上线却已接线、待审核发布却已接线、已完成但路由不存在 / 正向 3：未上线且未接线、已完成且路由存在、无路由声明不误伤）。判据可执行：登记「待审/未上线」的模块其路由不应出现在 `src/router/index.ts`，「✅ 已完成」的模块声明路由必须真实存在 | 本轮分支 | PR #77（fix/roadmap-status-truth）|
 
-**当前基线**（`explorer-v2` 分支 `ac5d8ce`，2026-11-03 实测）：`npm run build` EXIT 0 / `vitest run` **29 passed**（4 files）/ `node --test tests/jvaddress.test.ts` **3 passed**。
+**当前基线**（`explorer-v2` 分支 `90b032e`，2026-11-11 实测）：`npm run build` EXIT 0 / `vitest run` **267 passed**（21 files）/ `node --test tests/jvaddress.test.ts` **3 passed**。
 
-> 基线演进：13（PR #51~#54 前）→ **22**（PR #56 theme store 9 条）→ **29**（PR #62 gov-pending-ids 7 条）。
-> 上表五项现全部为「已合入」。**2026-10-30 这批（#57/#58/#56/#59）与 2026-11-03 这批（#60/#61/#62）均已全部 merge**，截至 2026-11-03 open PR/Issue 归零。
+> 基线演进：13（PR #51~#54 前）→ **22**（PR #56 theme store 9 条）→ **29**（PR #62 gov-pending-ids 7 条）→ **209**（PR #69 路线图检查器 + 之前各批用例）→ **260**（PR #75 前实测，20 files）→ **267**（本轮新增 roadmap-status 状态词门禁 7 条，21 files）。
+> 上表各项现全部为「已合入」。**2026-10-30 这批（#57/#58/#56/#59）与 2026-11-03 这批（#60/#61/#62）均已全部 merge**；截至 2026-11-11 仅 PR #76 仍 open。
 >
-> ⚠️ 计数口径提醒：`npm test` = vitest 29 + node:test 3 = **32 条**。写 PR 描述或文档时别只抄 vitest 数字又说「npm test N passed」——PR #62 描述里写「vitest 22 passed」就是这个错（当时实际已是 29）。
+> ⚠️ 计数口径提醒：`npm test` = vitest 267 + node:test 3 = **270 条**。写 PR 描述或文档时别只抄 vitest 数字又说「npm test N passed」——PR #62 描述里写「vitest 22 passed」就是这个错（当时实际已是 29）。
+> ⚠️ 本基线在 2026-11-03 之后长期未更新（一直写 29 passed），11-10 / 11-11 两次实测发现落后 200+ 条。**凡测试用例数有变化，当次 PR 必须同批更新此行**。
 
 **两条必须记住的规则**：
 
@@ -370,7 +372,7 @@ src/design-system/
 
 ---
 
-*最后更新：2026-11-03（大白 💎）—— 同步 11-03 合并后状态：#60/#61/#62 全部合入（merge aac3548 / 6b7cb27 / ac5d8ce），测试基线 22 → 29 passed（+7，PR #62 多签治理端用例），补记计数口径提醒（`npm test` = vitest + node:test）*
+*最后更新：2026-11-11（大白 💎）—— #32–#35 状态词由「待审/未上线」校正为「✅ 已完成」（实情：11-05 已随 PR #65/#67/#68 合入并上线，线上 4 个 chunk 全部 200）；新增 `tests/roadmap-status.spec.ts` 填补「状态词真伪」门禁空白；测试基线 29 → **267 passed（21 files）**，并注明基线曾长期未更新的原因与修复规则*
 
 
 ### PR #66 审计补全（2026-11-03）
