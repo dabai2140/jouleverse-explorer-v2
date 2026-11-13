@@ -240,15 +240,17 @@
 | mock 归因注释修正 | 查明真根因是 **jsdom 30.1.3 全包 0 处 `matchMedia` 实现**（非 node 版本差异、非 npm/pnpm 布局差异）；此前 CI 未暴露是因**无 spec 覆盖该路径**（覆盖盲区），非环境差异 | ✅ 已合入 | PR #54（8984455）|
 | theme store 冒烟用例 | `tests/theme-store.spec.ts` 9 条（初始化 2 / 三态 4 / 写操作 2 / `$dispose` 清理 1），前两条初始化用例**不自装 mock**，完全依赖 `setup.ts` | ✅ 已合入 | PR #56（dd192ab → merge 20a19cc）|
 | 多签治理端待执行交易编号 | `tests/gov-pending-ids.spec.ts` 7 条（id=0 保留 / 混合编号顺序 / 补齐位截断 / 非零编号不变 / 目标+selector 双重过滤 / pending=0 清空 / value>0 过滤），只 mock 合约读取，编解码走真实实现 | ✅ 已合入 | PR #62（08a5734…4b9b3cb → merge ac5d8ce）|
-| 路线图**状态词**一致性 | `tests/roadmap-status.spec.ts` 7 条（真实仓库 1 / 反向 3：未上线却已接线、待审核发布却已接线、已完成但路由不存在 / 正向 3：未上线且未接线、已完成且路由存在、无路由声明不误伤）。判据可执行：登记「待审/未上线」的模块其路由不应出现在 `src/router/index.ts`，「✅ 已完成」的模块声明路由必须真实存在 | 本轮分支 | PR #77（fix/roadmap-status-truth）|
+| 路由可达性门禁加固 | 2026-11-09 审计实测盲区：`route-gap.spec.ts` 只查「有无引用」不查「从入口可达」，删掉路由 + 加一个死模块引用即可全绿放行。改为从 `src/main.ts` + `src/router/*` 做传递闭包 BFS，只有真正可达的视图才不算孤立；新增 2 条反向用例（死模块绕过 / 多级不可达引用链） | ✅ 已合入 | PR #76（6447b43）|
+| 部署基线常量冻结 | 2026-11-09 审计实测盲区：`deployment-verification.spec.ts` 的 reader 默认值取 `baselineBlock.hash` 再喂回被测代码，基线常量本身无守护——把 WJ 摘要末位 `…1e89` 改 `…1e88` 仍 5 passed 全绿。新增 `tests/deployment-baseline-frozen.spec.ts` 3 条，用独立副本冻结三地址摘要 + 基线块号/哈希，改基线必须双改、CR 可见 | ✅ 已合入 | PR #76（6447b43）|
+| 路线图**状态词**一致性 | `tests/roadmap-status.spec.ts` 7 条（真实仓库 1 / 反向 3：未上线却已接线、待审核发布却已接线、已完成但路由不存在 / 正向 3：未上线且未接线、已完成且路由存在、无路由声明不误伤）。判据可执行：登记「待审/未上线」的模块其路由不应出现在 `src/router/index.ts`，「✅ 已完成」的模块声明路由必须真实存在 | ✅ 已合入 | PR #77（444ad6d）|
 
-**当前基线**（`explorer-v2` 分支 `90b032e`，2026-11-11 实测）：`npm run build` EXIT 0 / `vitest run` **267 passed**（21 files）/ `node --test tests/jvaddress.test.ts` **3 passed**。
+**当前基线**（`explorer-v2` 分支 `9bba2f8` + #77，2026-11-13 实测）：`npm run build` EXIT 0（1.70s）/ `vitest run` **272 passed**（22 files）/ `node --test tests/jvaddress.test.ts` **3 passed**（合计 **275** 条）。
 
-> 基线演进：13（PR #51~#54 前）→ **22**（PR #56 theme store 9 条）→ **29**（PR #62 gov-pending-ids 7 条）→ **209**（PR #69 路线图检查器 + 之前各批用例）→ **260**（PR #75 前实测，20 files）→ **267**（本轮新增 roadmap-status 状态词门禁 7 条，21 files）。
-> 上表各项现全部为「已合入」。**2026-10-30 这批（#57/#58/#56/#59）与 2026-11-03 这批（#60/#61/#62）均已全部 merge**；截至 2026-11-11 仅 PR #76 仍 open。
+> 基线演进：13（PR #51~#54 前）→ **22**（PR #56 theme store 9 条）→ **29**（PR #62 gov-pending-ids 7 条）→ **209**（PR #69 路线图检查器 + 之前各批用例）→ **260**（PR #75 前实测，20 files）→ **267**（PR #77 roadmap-status 7 条，21 files）→ **272**（PR #76 路由可达性净增 2 条 + 部署基线冻结 3 条，22 files）。
+> 上表各项现全部为「已合入」。**2026-10-30 这批（#57/#58/#56/#59）与 2026-11-03 这批（#60/#61/#62）均已全部 merge**；#76 与 #77 于 2026-11-13 合入，open PR 仅剩 #78–#83（待另立独立 repo）。
 >
-> ⚠️ 计数口径提醒：`npm test` = vitest 267 + node:test 3 = **270 条**。写 PR 描述或文档时别只抄 vitest 数字又说「npm test N passed」——PR #62 描述里写「vitest 22 passed」就是这个错（当时实际已是 29）。
-> ⚠️ 本基线在 2026-11-03 之后长期未更新（一直写 29 passed），11-10 / 11-11 两次实测发现落后 200+ 条。**凡测试用例数有变化，当次 PR 必须同批更新此行**。
+> ⚠️ 计数口径提醒：`npm test` = vitest **272** + node:test 3 = **275 条**。写 PR 描述或文档时别只抄 vitest 数字又说「npm test N passed」——PR #62 描述里写「vitest 22 passed」就是这个错（当时实际已是 29）。
+> ⚠️ 本基线在 2026-11-03 之后长期未更新（一直写 29 passed），11-10 / 11-11 两次实测发现落后 200+ 条。**凡测试用例数有变化，当次 PR 必须同批更新此行。**
 
 **两条必须记住的规则**：
 
@@ -372,7 +374,7 @@ src/design-system/
 
 ---
 
-*最后更新：2026-11-11（大白 💎）—— #32–#35 状态词由「待审/未上线」校正为「✅ 已完成」（实情：11-05 已随 PR #65/#67/#68 合入并上线，线上 4 个 chunk 全部 200）；新增 `tests/roadmap-status.spec.ts` 填补「状态词真伪」门禁空白；测试基线 29 → **267 passed（21 files）**，并注明基线曾长期未更新的原因与修复规则*
+*最后更新：2026-11-13（大白 💎）—— 合并 #76 与 #77 两条文档门禁：#76 补「路由是否从入口真正可达」（`route-gap` 改入口传递闭包 + 新增 2 条反向用例）与「部署基线常量冻结」（`deployment-baseline-frozen` 3 条）；#77 把 #32–#35 状态词由「待审/未上线」校正为「✅ 已完成」（11-05 已随 PR #65/#67/#68 上线）并新增 `tests/roadmap-status.spec.ts` 7 条填补「状态词真伪」门禁空白。测试基线 260 → **272 passed（22 files）**（含 node:test 3 = 275）。*
 
 
 ### PR #66 审计补全（2026-11-03）
