@@ -44,10 +44,10 @@
 | 29 | JNSVote 治理端（创建提案） | ✅ 已完成 | `JNSVoteGovernancePanel.vue` + `composables/useJNSVoteGovernance.ts` | 多签签名人专属（`v-if="isSigner"`），Gnosis 2/3 多签 submit → confirm → execute 三段流程；三条安全边界（列表过滤 / RPC 前置短路 / 防造死提案）详见 §二 P3-1；PR #62，merge ac5d8ce（2026-11-03） |
 | 30 | 生态合约注册目录 | ✅ 已完成 | `ContractRegistry.vue` + `contracts/toolbox.ts` | `/contracts`；复用本地 toolboxContracts 部署清单（12 个：核心 4 / 生态 8），搜索、分类、地址复制/跳转、合约工具入口；默认零 RPC，支持按需只读核验单个合约；目录源自 PR #66 |
 | 31 | 验证者 / 签名人目录 | ✅ 已完成 | `Validators.vue` + `utils/clique-signers.ts` | `/validators`；最新高度 + 最近 epoch（30000 块）检查点 extraData，未命中缓存时两次逻辑读取；60 秒缓存及并发合并；仅检查点快照，不重放后续投票、不验证 seal、不提供出块分布/在线状态，PR #66 |
-| 32 | 近期数据分析面板 | 🚧 本分支实现，待审核发布 | `Analytics.vue` | `/tools/analytics`；12/24个区块有界样本、缓存，无全链日志扫描 |
-| 33 | 通用经典多签管理 | 🚧 本分支实现，待审核发布 | `Multisig.vue` | `/tools/multisig`；任意兼容地址、分页、审阅、发送前复核 |
-| 34 | 链上交易核验与记录导出工具 | 🚧 本分支实现，待审未上线 | `ReceiptVerifier.vue` + `services/receipt-verifier.ts` | `/tools/receipt`；最多5个只读请求；归属一致性/重组检查；机器可读快照导出；不等于支付/履约成功，详见 `receipt-verifier.md` |
-| 35 | 生态接入验收 | 🚧 本分支完成，待审未上线 | `NetworkReadiness.vue` + `services/network-readiness.ts` | `/tools/integration`；本地清单导出、最多8次只读请求、能力边界明确；详见network-readiness.md |
+| 32 | 近期数据分析面板 | ✅ 已完成 | `Analytics.vue` | `/tools/analytics`；12/24个区块有界样本、缓存，无全链日志扫描 |
+| 33 | 通用经典多签管理 | ✅ 已完成 | `Multisig.vue` | `/tools/multisig`；任意兼容地址、分页、审阅、发送前复核 |
+| 34 | 链上交易核验与记录导出工具 | ✅ 已完成 | `ReceiptVerifier.vue` + `services/receipt-verifier.ts` | `/tools/receipt`；最多5个只读请求；归属一致性/重组检查；机器可读快照导出；不等于支付/履约成功，详见 `receipt-verifier.md` |
+| 35 | 生态接入验收 | ✅ 已完成 | `NetworkReadiness.vue` + `services/network-readiness.ts` | `/tools/integration`；本地清单导出、最多8次只读请求、能力边界明确；详见network-readiness.md |
 
 > **本表覆盖度自检（2026-11-03 更新，并行 PR #65/#66/#67/#68 合入后顺延编号）**：`src/views/` 下共 **22** 个视图，本表 #1–#35 已全部覆盖（0 漏项）。
 > 注：#29 是组件层（`components/` + `composables/`）而非独立视图，从 #36 起如再新增组件级模块可延续此编号。
@@ -240,15 +240,17 @@
 | mock 归因注释修正 | 查明真根因是 **jsdom 30.1.3 全包 0 处 `matchMedia` 实现**（非 node 版本差异、非 npm/pnpm 布局差异）；此前 CI 未暴露是因**无 spec 覆盖该路径**（覆盖盲区），非环境差异 | ✅ 已合入 | PR #54（8984455）|
 | theme store 冒烟用例 | `tests/theme-store.spec.ts` 9 条（初始化 2 / 三态 4 / 写操作 2 / `$dispose` 清理 1），前两条初始化用例**不自装 mock**，完全依赖 `setup.ts` | ✅ 已合入 | PR #56（dd192ab → merge 20a19cc）|
 | 多签治理端待执行交易编号 | `tests/gov-pending-ids.spec.ts` 7 条（id=0 保留 / 混合编号顺序 / 补齐位截断 / 非零编号不变 / 目标+selector 双重过滤 / pending=0 清空 / value>0 过滤），只 mock 合约读取，编解码走真实实现 | ✅ 已合入 | PR #62（08a5734…4b9b3cb → merge ac5d8ce）|
-| 路由可达性门禁加固 | 2026-11-09 审计实测盲区：`route-gap.spec.ts` 只查「有无引用」不查「从入口可达」，删掉路由 + 加一个死模块引用即可全绿放行。改为从 `src/main.ts` + `src/router/*` 做传递闭包 BFS，只有真正可达的视图才不算孤立；新增 2 条反向用例（死模块绕过 / 多级不可达引用链） | 🚧 本分支（待审） | `fix/gate-hardening-baseline-reachability` |
-| 部署基线常量冻结 | 2026-11-09 审计实测盲区：`deployment-verification.spec.ts` 的 reader 默认值取 `baselineBlock.hash` 再喂回被测代码，基线常量本身无守护——把 WJ 摘要末位 `…1e89` 改 `…1e88` 仍 5 passed 全绿。新增 `tests/deployment-baseline-frozen.spec.ts` 3 条，用独立副本冻结三地址摘要 + 基线块号/哈希，改基线必须双改、CR 可见 | 🚧 本分支（待审） | `fix/gate-hardening-baseline-reachability` |
+| 路由可达性门禁加固 | 2026-11-09 审计实测盲区：`route-gap.spec.ts` 只查「有无引用」不查「从入口可达」，删掉路由 + 加一个死模块引用即可全绿放行。改为从 `src/main.ts` + `src/router/*` 做传递闭包 BFS，只有真正可达的视图才不算孤立；新增 2 条反向用例（死模块绕过 / 多级不可达引用链） | ✅ 已合入 | PR #76（6447b43）|
+| 部署基线常量冻结 | 2026-11-09 审计实测盲区：`deployment-verification.spec.ts` 的 reader 默认值取 `baselineBlock.hash` 再喂回被测代码，基线常量本身无守护——把 WJ 摘要末位 `…1e89` 改 `…1e88` 仍 5 passed 全绿。新增 `tests/deployment-baseline-frozen.spec.ts` 3 条，用独立副本冻结三地址摘要 + 基线块号/哈希，改基线必须双改、CR 可见 | ✅ 已合入 | PR #76（6447b43）|
+| 路线图**状态词**一致性 | `tests/roadmap-status.spec.ts` 7 条（真实仓库 1 / 反向 3：未上线却已接线、待审核发布却已接线、已完成但路由不存在 / 正向 3：未上线且未接线、已完成且路由存在、无路由声明不误伤）。判据可执行：登记「待审/未上线」的模块其路由不应出现在 `src/router/index.ts`，「✅ 已完成」的模块声明路由必须真实存在 | ✅ 已合入 | PR #77（444ad6d）|
 
-**当前基线**（`explorer-v2` 分支 `90b032e`，2026-11-10 实测）：`npm run build` EXIT 0（1.73s）/ `vitest run` **260 passed**（20 files）/ `node --test tests/jvaddress.test.ts` **3 passed**（合计 **263** 条）。
+**当前基线**（`explorer-v2` 分支 `9bba2f8` + #77，2026-11-13 实测）：`npm run build` EXIT 0（1.70s）/ `vitest run` **272 passed**（22 files）/ `node --test tests/jvaddress.test.ts` **3 passed**（合计 **275** 条）。
 
-> 基线演进：13（PR #51~#54 前）→ **22**（PR #56 theme store 9 条）→ **29**（PR #62 gov-pending-ids 7 条）→ **260**（4 files → **20 files**，PR #64~#73 陆续补入路由可达性、合约部署核验、治理端操作等用例）。
-> 上表五项现全部为「已合入」。**2026-10-30 这批（#57/#58/#56/#59）与 2026-11-03 这批（#60/#61/#62）均已全部 merge**，截至 2026-11-03 open PR/Issue 归零。
+> 基线演进：13（PR #51~#54 前）→ **22**（PR #56 theme store 9 条）→ **29**（PR #62 gov-pending-ids 7 条）→ **209**（PR #69 路线图检查器 + 之前各批用例）→ **260**（PR #75 前实测，20 files）→ **267**（PR #77 roadmap-status 7 条，21 files）→ **272**（PR #76 路由可达性净增 2 条 + 部署基线冻结 3 条，22 files）。
+> 上表各项现全部为「已合入」。**2026-10-30 这批（#57/#58/#56/#59）与 2026-11-03 这批（#60/#61/#62）均已全部 merge**；#76 与 #77 于 2026-11-13 合入，open PR 仅剩 #78–#83（待另立独立 repo）。
 >
-> ⚠️ 计数口径提醒：`npm test` = vitest **260** + node:test 3 = **263 条**。写 PR 描述或文档时别只抄 vitest 数字又说「npm test N passed」——PR #62 描述里写「vitest 22 passed」就是这个错（当时实际已是 29）。本条基线在 2026-11-03 后长期滞留在「29 passed（4 files）」，实际已 260/20，落后 231 条，直至 2026-11-10 才校正；**每次大批量合入后应复跑并更新本节**，否则文档会给出错误的健康度信号。
+> ⚠️ 计数口径提醒：`npm test` = vitest **272** + node:test 3 = **275 条**。写 PR 描述或文档时别只抄 vitest 数字又说「npm test N passed」——PR #62 描述里写「vitest 22 passed」就是这个错（当时实际已是 29）。
+> ⚠️ 本基线在 2026-11-03 之后长期未更新（一直写 29 passed），11-10 / 11-11 两次实测发现落后 200+ 条。**凡测试用例数有变化，当次 PR 必须同批更新此行。**
 
 **两条必须记住的规则**：
 
@@ -372,7 +374,7 @@ src/design-system/
 
 ---
 
-*最后更新：2026-11-10（大白 💎）—— 校正过期测试基线：文档长期写「vitest 29 passed（4 files）」（11-03 口径），实测已 **260 passed / 20 files**，落后 231 条，已更新基线行、演进链与口径提醒；同步 11-09 合并后状态（#71/#72/#73 合入，merge bbb071b；#74/#75 logo 修复，HEAD `90b032e`），open PR/Issue 归零。*
+*最后更新：2026-11-13（大白 💎）—— 合并 #76 与 #77 两条文档门禁：#76 补「路由是否从入口真正可达」（`route-gap` 改入口传递闭包 + 新增 2 条反向用例）与「部署基线常量冻结」（`deployment-baseline-frozen` 3 条）；#77 把 #32–#35 状态词由「待审/未上线」校正为「✅ 已完成」（11-05 已随 PR #65/#67/#68 上线）并新增 `tests/roadmap-status.spec.ts` 7 条填补「状态词真伪」门禁空白。测试基线 260 → **272 passed（22 files）**（含 node:test 3 = 275）。*
 
 
 ### PR #66 审计补全（2026-11-03）
