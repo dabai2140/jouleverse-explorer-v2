@@ -7,6 +7,14 @@
 
 export const JNSVOTE_MULTISIG_ADDRESS = '0x4eF599b6E39D950D6Ddbd830fF5f95e06770C1B3' as const
 
+// 多签签名人地址 → 显示名（小写地址为键，单一来源，供治理面板与引导组件共用，避免多份硬编码副本漂移）
+// 仅作前端展示装饰，非授权依据；真实权限由合约 getOwners()/isOwner 决定。
+export const JNSVOTE_SIGNERS: Record<string, string> = {
+  '0x5bf50f2931688f886f46f88d5ceede530bb92076': 'Koant (J-0)',
+  '0xe369810b1b07d0b82f702667429c3842905c14ff': '剪云为裳 (J-37)',
+  '0xf66082f48cbc11ac83cdde11644f4db2f363205a': '明海云 (J-7)',
+}
+
 // Gnosis MultiSigWallet 最小 ABI（仅治理端所需函数）
 // 语义：submitTransaction 内部会自动 confirmTransaction，故提交者即为首个确认人
 export const multisigABI = [

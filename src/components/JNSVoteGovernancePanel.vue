@@ -8,6 +8,7 @@ import { NButton, NInput, NTag, NSpin, NDivider } from 'naive-ui'
 import { useMessage } from 'naive-ui'
 import { useWalletStore } from '../stores/wallet'
 import { useJNSVoteGovernance, type PendingProposalTx } from '../composables/useJNSVoteGovernance'
+import { JNSVOTE_SIGNERS } from '../contracts/jnsvoteGovernance'
 import { publicClient } from '../config/client'
 import { JvHashText, JvActionButton } from '../design-system'
 import { assertManagedOperation, GOVERNANCE_LABELS, parseProposalId, type GovernanceOperation, type ManagedProposal, type ProposalInput } from '../utils/jnsvote-governance'
@@ -108,13 +109,16 @@ async function checkReceipt() {
 const formValid = computed(() => {
   const tb = parseBlockHeight(form.value.timeBegin)
   const te = parseBlockHeight(form.value.timeEnd)
+  const link = form.value.link.trim()
   return (
     blockReady.value && form.value.title.trim().length > 0 &&
     tb !== null &&
     te !== null &&
     // 产品规则：仅允许创建未来开始的提案，避免提交时已开始或来不及确认。
     tb > currentBlock.value &&
-    te > tb && te < 2n ** 256n
+    te > tb && te < 2n ** 256n &&
+    // link 为空 或 完整 URL scheme（https/http/ipfs），避免相对路径被渲染成站点内 hash 路由死链
+    (link === '' || /^(https?:\/\/|ipfs:\/\/)/i.test(link))
   )
 })
 
@@ -211,16 +215,11 @@ function isTxExpired(tx: PendingProposalTx): boolean {
 }
 
 // 地址 → 显示名。
-// 以链上 getOwners() 顺序为准（signers 数组），本地 SIGNER_NAMES 只作可选装饰；
+// 以链上 getOwners() 顺序为准（signers 数组），共享常量 JNSVOTE_SIGNERS 只作可选装饰（单一来源，与 JNSVoteGuide 同源）；
 // 多签若改成员（如历史 addOwner），未命中映射时回退为「签名人 #N + 地址」，不会静默失效成裸地址（建议 3）
-const SIGNER_NAMES: Record<string, string> = {
-  '0x5bf50f2931688f886f46f88d5ceede530bb92076': 'Koant (J-0)',
-  '0xe369810b1b07d0b82f702667429c3842905c14ff': '剪云为裳 (J-37)',
-  '0xf66082f48cbc11ac83cdde11644f4db2f363205a': '明海云 (J-7)',
-}
 function signerName(a: string): string {
   const lower = a.toLowerCase()
-  if (SIGNER_NAMES[lower]) return SIGNER_NAMES[lower]
+  if (JNSVOTE_SIGNERS[lower]) return JNSVOTE_SIGNERS[lower]
   // 回退：在链上 signers 里找序号，显示「签名人 #N」；找不到再退化为短地址
   const idx = signers.value.findIndex((s) => s === lower)
   return idx >= 0 ? `签名人 #${idx + 1} ${shortAddr(a)}` : shortAddr(a)
@@ -251,7 +250,7 @@ watch(() => walletStore.address, (addr) => {
         </div>
         <div class="gov-form-row">
           <label class="gov-label">提案详情链接</label>
-          <NInput v-model:value="form.link" placeholder="https://…（可选，指向完整提案文档）" />
+          <NInput v-model:value="form.link" placeholder="https://…（可选，完整 URL，支持 https/http/ipfs）" />
         </div>
         <div class="gov-form-row">
           <label class="gov-label">开始区块 *</label>

@@ -4,21 +4,17 @@
 // 分两类受众：普通用户（参与投票）与多签签名人（创建提案）。
 // 暗色模式：外层容器用 --jv-* 变量；步骤/标签页用 naive-ui 组件，随 NConfigProvider 全局主题自动适配。
 
-import { NCollapse, NCollapseItem, NTabs, NTabPane, NSteps, NStep } from 'naive-ui'
+import { NCollapse, NCollapseItem, NTabs, NTabPane } from 'naive-ui'
 import { computed } from 'vue'
 import { useWalletStore } from '../stores/wallet'
+import { JNSVOTE_SIGNERS } from '../contracts/jnsvoteGovernance'
+import { DECISION_RULE_DISPLAY } from '../utils/jnsvote-decision'
 
 const walletStore = useWalletStore()
 // 当前账户是否为多签签名人（前端只做轻量判断，不据此授权；真正权限由合约 isOwner 决定）
-// 已知签名人地址（与 JNSVoteGovernancePanel 的 SIGNER_NAMES 保持一致，仅用于引导高亮，非授权依据）
-const SIGNER_ADDRESSES = new Set([
-  '0x5bf50f2931688f886f46f88d5ceede530bb92076',
-  '0xe369810b1b07d0b82f702667429c3842905c14ff',
-  '0xf66082f48cbc11ac83cdde11644f4db2f363205a',
-])
 const isSigner = computed(() => {
   const addr = walletStore.address?.toLowerCase()
-  return addr ? SIGNER_ADDRESSES.has(addr) : false
+  return addr ? Object.prototype.hasOwnProperty.call(JNSVOTE_SIGNERS, addr) : false
 })
 
 // 参与投票步骤（普通用户）
@@ -61,11 +57,8 @@ const createSteps = [
   },
 ]
 
-// 结果判定规则（背景知识）
-const decisionRules = [
-  { rule: 'V1', scope: '提案 id ≤ 2', ar: '> 2/3', rr: '> 1/2' },
-  { rule: 'V2', scope: '提案 id ≥ 3', ar: '> 2/3', rr: '> 0.4' },
-]
+// 结果判定规则（背景知识，展示阈值与 src/utils/jnsvote-decision.ts 同源）
+const decisionRules = DECISION_RULE_DISPLAY
 </script>
 
 <template>
@@ -75,14 +68,12 @@ const decisionRules = [
         <n-tabs type="line" default-value="vote" class="guide-tabs">
           <!-- 参与投票 -->
           <n-tab-pane name="vote" tab="🙋 参与投票">
-            <n-steps vertical :current="voteSteps.length" status="finish" class="guide-steps">
-              <n-step
-                v-for="(s, i) in voteSteps"
-                :key="i"
-                :title="`${i + 1}. ${s.title}`"
-                :description="s.description"
-              />
-            </n-steps>
+            <ol class="guide-steps">
+              <li v-for="(s, i) in voteSteps" :key="i">
+                <strong>{{ s.title }}</strong>
+                <span>{{ s.description }}</span>
+              </li>
+            </ol>
             <div class="guide-note">
               💡 每个地址对每个提案只能投一次；投票后自动铸造 1 枚不可转移的 JNSVote SBT 徽章。
             </div>
@@ -91,19 +82,17 @@ const decisionRules = [
           <!-- 多签创建提案 -->
           <n-tab-pane name="create" tab="🛡️ 多签创建提案">
             <div class="guide-demo">
-              🧪 <strong>试用提案（本次上线自带）</strong>：标题「为试用JNSVote 治理投票（链上）新功能创建一个链上测试提案，用于测试新功能」；正文见 `docs/jnsvote-proposal-deploy.md`；开始区块晚于当前区块（建议留约 1 小时缓冲 ≈ 240 块），结束区块 = 开始区块 + 约 7 天（≈ 40320 块）。由签名人按下方流程创建、普通用户试投票。
+              🧪 <strong>试用提案（本次上线自带，用于 2026-11 上线试用，提案创建后失效）</strong>：标题「为试用JNSVote 治理投票（链上）新功能创建一个链上测试提案，用于测试新功能」；开始区块晚于当前区块（建议留约 1 小时缓冲 ≈ 240 块），结束区块 = 开始区块 + 约 7 天（≈ 40320 块）。由签名人按下方流程创建、普通用户试投票。
             </div>
             <div v-if="!isSigner" class="guide-signer-tip">
               ℹ️ 当前账户不是多签签名人，无法看到治理端创建入口。创建提案仅对签名人开放；下方为完整流程说明，供了解。
             </div>
-            <n-steps vertical :current="createSteps.length" status="finish" class="guide-steps">
-              <n-step
-                v-for="(s, i) in createSteps"
-                :key="i"
-                :title="`${i + 1}. ${s.title}`"
-                :description="s.description"
-              />
-            </n-steps>
+            <ol class="guide-steps">
+              <li v-for="(s, i) in createSteps" :key="i">
+                <strong>{{ s.title }}</strong>
+                <span>{{ s.description }}</span>
+              </li>
+            </ol>
             <div class="guide-note">
               💡 多签为 2/3 门槛；区块约 15 秒/块，创建提案须让开始区块晚于当前区块。确认数恰达门槛时可能立即执行，签名前务必核验参数。
             </div>
@@ -130,7 +119,7 @@ const decisionRules = [
               </tbody>
             </table>
             <div class="guide-note">
-              💡 支持率 ar = 赞成票数 / (赞成 + 反对)；代表率 rr = 赞成票代表 JNS 持仓 / JNS 总量快照。两项同时满足才算「通过」。
+              💡 支持率 ar = 赞成票数 / (赞成 + 反对)；代表率 rr = 赞成票代表 JNS 持仓 / 当前 JNS 总发行量（每次投票时刷新）。两项同时满足才算「通过」。
             </div>
           </n-tab-pane>
         </n-tabs>
@@ -150,7 +139,29 @@ const decisionRules = [
 }
 
 .guide-steps {
-  padding: 8px 4px;
+  margin: 0;
+  padding: 8px 4px 8px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--jv-text-primary, #0f172a);
+}
+
+.guide-steps li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.guide-steps li strong {
+  color: var(--jv-text-primary, #0f172a);
+  font-weight: 600;
+}
+
+.guide-steps li span {
+  color: var(--jv-text-secondary, #475569);
 }
 
 .guide-note {

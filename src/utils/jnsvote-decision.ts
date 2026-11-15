@@ -2,7 +2,7 @@
 // V1 规则（提案 id <= 2）：支持率 ar > 2/3 且 代表率 rr > 1/2
 // V2 规则（提案 id >= 3）：支持率 ar > 2/3 且 代表率 rr > 0.4
 // 支持率 ar = 赞成票数 / (赞成 + 反对)
-// 代表率 rr = 赞成票代表 JNS 持仓量 / JNS 总量快照
+// 代表率 rr = 赞成票代表 JNS 持仓量 / 当前 JNS 总发行量（每次投票时刷新，非创建时固定快照）
 
 export type Decision = 1 | -1 | 0  // 1=通过, -1=未通过, 0=未出结果
 
@@ -45,3 +45,9 @@ export function representativeRate(countJNSvotedFor: bigint, totalJNS: bigint): 
   if (totalJNS === 0n) return null
   return Number((countJNSvotedFor * 10000n) / totalJNS) / 100
 }
+
+// 决策规则展示文案（供引导组件 / 文档引用，与判定逻辑同源，避免两处阈值漂移）
+export const DECISION_RULE_DISPLAY = [
+  { rule: 'V1', scope: '提案 id ≤ 2', ar: '> 2/3', rr: '> 1/2' },
+  { rule: 'V2', scope: '提案 id ≥ 3', ar: '> 2/3', rr: '> 0.4' },
+] as const
