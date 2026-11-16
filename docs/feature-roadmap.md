@@ -289,14 +289,14 @@
 | 组件层用例（JNSVote 指南）| `tests/jnsvote-guide.spec.ts` 4 条（非签名人提示中性化 / 签名人无提示 / 步骤区为 `<ol>` 非完成态 / `DECISION_RULE_DISPLAY` 与判据同源）。**注意：这只补了一个组件，`src/components/` 整体仍无门禁**——`check-feature-roadmap.ts` 只扫 `src/views/`、`route-gap.spec.ts` 也只遍历 views，新增组件既不需登记路线图也不需写测试即可三道闸全绿（PR #87 期间实测确认） | ✅ 已合入 | PR #87（1a38ae7）|
 | 合约工具 revert 解码 | `tests/revert-decode.spec.ts` 14 条（Error(string) 5 条含 UTF-8/32 字节边界 + Panic 映射 5 条 + 兜底健壮性 2 条 + 边界 2 条）。修复 `ContractTool.vue` 抽取到 `src/utils/revert.ts` 时发现的**真实解码 bug**：`Error(string)` 分支偏移量多算一格，任何标准 revert 消息都解成空串（详见下方教训）| ✅ 已合入 | PR #90 |
 | 全局搜索输入解析 | `tests/search-resolve.spec.ts` 30 条（JNS/HEX/B32/交易/区块号五类 + 无法识别 + 帮助示例自校验）。抽自 `Home.vue handleSearch` 内联分支，改为 `src/utils/search-resolve.ts` 纯函数。修了两个真 bug：① 40 位全数字地址被 `/^\d+$/` 抢走当区块号；② 无法识别时静默 `push('/block/<乱码>')` | ✅ 已合入 | PR #95 |
+| **测试基线一致性门禁** | 治「基线腐烂」第三次复发：`docs/feature-roadmap.md` 的用例数**从未绑定任何会失败的检查**，靠自觉维护，于是 11-10 落后 231 条 / 11-11 落后 238 条 / 11-16 落后 4 条。新增 `scripts/check-test-baseline.ts`：实跑 vitest（JSON reporter）+ node:test（TAP reporter），把 vitest passed / files、node:test passed、合计、以及「计数口径提醒」行的三个数字逐项与文档比对，任一不等即 EXIT 1；测试自身有失败也拒绝给绿灯；文档自身不自洽（合计 ≠ 两项之和）同样拦。配套 `tests/test-baseline-gate.spec.ts` 15 条（正向 3 / 解析失败负向 4 / 数字不符负向 6 / 产物格式负向 2） | ✅ 已合入 | 本 PR |
+**当前基线**（`explorer-v2` 分支 `52a759d`（#95 合入后），2026-11-20 实测）：`npm run build` EXIT 0 / `vitest run` **359 passed**（28 files）/ `node --test tests/jvaddress.test.ts` **3 passed**（合计 **362** 条）。
 
-**当前基线**（`explorer-v2` 分支 `98ea294`（#93 合入后），2026-11-20 实测）：`npm run build` EXIT 0 / `vitest run` **344 passed**（27 files）/ `node --test tests/jvaddress.test.ts` **3 passed**（合计 **347** 条）。
-
-> 基线演进：13（PR #51~#54 前）→ **22**（PR #56 theme store 9 条）→ **29**（PR #62 gov-pending-ids 7 条）→ **209**（PR #69 路线图检查器 + 之前各批用例）→ **260**（PR #75 前实测，20 files）→ **267**（PR #77 roadmap-status 7 条，21 files）→ **272**（PR #76 路由可达性净增 2 条 + 部署基线冻结 3 条，22 files）→ **276**（PR #87 补 `tests/jnsvote-guide.spec.ts` 4 条，23 files）→ **290**（`tests/revert-decode.spec.ts` 14 条，24 files）→ **314**（区块详情页对等：`tests/block-detail.spec.ts` 18 条 + `tests/block-detail-view.spec.ts` 6 条，26 files）→ **344**（全局搜索输入解析：`tests/search-resolve.spec.ts` 30 条，27 files）。
-> 上表各项现全部为「已合入」。**2026-10-30 这批（#57/#58/#56/#59）与 2026-11-03 这批（#60/#61/#62）均已全部 merge**；#76 与 #77 于 2026-11-13 合入，#87 于 2026-11-15 合入；open PR 仅剩 **#78**（维持不合入，待作者在独立 repo 落地自持地址表/可安装/补 LICENSE）。
+> 基线演进：13（PR #51~#54 前）→ **22**（PR #56 theme store 9 条）→ **29**（PR #62 gov-pending-ids 7 条）→ **209**（PR #69 路线图检查器 + 之前各批用例）→ **260**（PR #75 前实测，20 files）→ **267**（PR #77 roadmap-status 7 条，21 files）→ **272**（PR #76 路由可达性净增 2 条 + 部署基线冻结 3 条，22 files）→ **276**（PR #87 补 `tests/jnsvote-guide.spec.ts` 4 条，23 files）→ **290**（`tests/revert-decode.spec.ts` 14 条，24 files）→ **314**（区块详情页对等：`tests/block-detail.spec.ts` 18 条 + `tests/block-detail-view.spec.ts` 6 条，26 files）→ **344**（全局搜索输入解析：`tests/search-resolve.spec.ts` 30 条，27 files）→ **359**（基线门禁 `tests/test-baseline-gate.spec.ts` 15 条，28 files）。
+> 上表各项现全部为「已合入」。**2026-10-30 这批（#57/#58/#56/#59）与 2026-11-03 这批（#60/#61/#62）均已全部 merge**；#76 与 #77 于 2026-11-13 合入，#87 于 2026-11-15 合入，#90/#91/#93/#94/#95 于 2026-11-20 合入；open PR 仅剩 **#78**（维持不合入，待作者在独立 repo 落地自持地址表/可安装/补 LICENSE）。
 >
-> ⚠️ 计数口径提醒：`npm test` = vitest **344** + node:test 3 = **347 条**。写 PR 描述或文档时别只抄 vitest 数字又说「npm test N passed」——PR #62 描述里写「vitest 22 passed」就是这个错（当时实际已是 29）。
-> ⚠️ 本基线在 2026-11-03 之后长期未更新（一直写 29 passed），11-10 / 11-11 两次实测发现落后 200+ 条。**凡测试用例数有变化，当次 PR 必须同批更新此行。**
+> ⚠️ 计数口径提醒：`npm test` = vitest **359** + node:test 3 = **362 条**。写 PR 描述或文档时别只抄 vitest 数字又说「npm test N passed」——PR #62 描述里写「vitest 22 passed」就是这个错（当时实际已是 29）。
+> ✅ **本行已由 `scripts/check-test-baseline.ts` 强制守护**（2026-11-16 起）。此前它无任何会失败的检查绑定，只能靠自觉，先后腐烂三次（11-10 落后 231 条、11-11 落后 238 条、11-16 落后 4 条）。现规则有牙齿：数字不符 CI 直接红，`npm run check:baseline` 本地可复现。
 
 **两条必须记住的规则**：
 
@@ -435,8 +435,8 @@ src/design-system/
 
 ---
 
-*最后更新：2026-11-20（大白 💎）—— 区块详情页对等（对应 PR #91 对等清单 §一·B 区块详情，v1 字段补齐）：补确认数（`conf = latest - blockNumber`，bigint 相减避免大高度丢精度）、`extraData`（剥 0x 前缀 + 含不可打印字节时不吐乱码、只给 raw hex 与字节数）、交易列表输入数据（对齐 v1 `ng-if="tx.input && tx.input !== '0x'"`）。基线 290 → **314 passed（26 files）**，含 node:test 3 = 317。新增 `scripts/smoke-block-detail.mjs` 真实链验证（锚点块 8664408 含真实 calldata 交易）。*
-*（同日另记）修 `ContractTool.vue` revert 解码真实 bug（`Error(string)` 偏移量多算一格，任何标准 revert 消息都解成空串）并抽到 `src/utils/revert.ts`；**项目目标修订**为 v1 功能 100% 移植，P4 废弃结论作废，新增 P5 对等补齐批次与 `docs/v1-parity-checklist.md`。*
+*最后更新：2026-11-20（大白 💎）—— 新增**测试基线一致性门禁**（`scripts/check-test-baseline.ts` + `tests/test-baseline-gate.spec.ts` 15 条 + CI 步骤），把「当前基线」行的四个数字与「计数口径提醒」行绑定到会失败的检查：实跑 vitest/node:test 后逐项校对，不符即 EXIT 1。基线 344 → **359 passed（28 files）**，含 node:test 3 = 362。*
+*（同日另记）区块详情页对等（确认数 / extraData / 交易输入数据）、revert 解码修复、全局搜索五类输入解析、v1 100% 对等目标修订均已合入主线。*
 
 
 ### PR #66 审计补全（2026-11-03）
