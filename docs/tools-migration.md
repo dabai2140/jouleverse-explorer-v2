@@ -4,6 +4,12 @@
 **维护人**：大白（💎）  
 **状态**：📋 已立项，逐工具迁移中（默克尔证明生成器 ✅ 2026-08-05）
 
+> ⚠️ **2026-11-17 目标修订**：项目目标改为「v1 功能 100% 移植」（见 [`docs/v1-parity-checklist.md`](./v1-parity-checklist.md)）。
+> 本文档 §2.2 中「链上红包 / CryptoJunks / 合约验证 = ❌ 废弃，不迁移」的结论**已作废**，
+> 三项均改为必须移植，批次归入路线图 §二 P5-5 / P5-4 / P5-7。
+> 工具集专项的变更：`contractx` 从「外链 v1」改为**必须重写迁移**（P5-6），
+> 且 `core` 需补**事件查询/订阅面板**与 6 个缺失合约注册。
+
 ---
 
 ## 一、背景
@@ -24,22 +30,32 @@ V1 工具集入口（`jscan.jnsdao.com/tools/index.html`）为卡片式布局，
 
 | 分类 | 工具 | V1 路径 | 现状 | 迁移策略 |
 |------|------|---------|------|---------|
-| 合约工具 | 核心合约交互工具集（部署/调用/事件查询） | `/tools/core/index.html` | ✅ 在用 | **重写迁移**（viem 实现） |
-| 合约工具 | 其他合约交互工具集（自定义 ABI） | `/tools/contractx/index.html` | ✅ 在用 | **重写迁移**，可与 core 合并为统一"合约调用工具" |
+| 合约工具 | 核心合约交互工具集（部署/调用/**事件订阅**） | `/tools/core/index.html` | ✅ 在用 | **重写迁移**（viem 实现）——🟡 部分完成：读写表单已迁（P5-6），**事件面板未迁** |
+| 合约工具 | 其他合约交互工具集（**自定义 ABI**） | `/tools/contractx/index.html` | ✅ 在用 | **重写迁移**（必须，不再外链）→ `/tools/custom`（P5-6） |
 | 空投工具 | 默克尔证明生成器（Core 空投） | `/tools/airdrop/merkle-proof-generator.html` | ✅ 在用 | **✅ 已迁移**（2026-08-05，V2 `/tools/merkle`） |
 | 分析与管理 | 数据分析面板 | — | 本分支实现，待审核发布 | `/tools/analytics`，近期有界样本 |
 | 分析与管理 | 多签钱包管理 | — | 本分支实现，待审核发布 | `/tools/multisig`，经典多签已有钱包管理 |
+
+**缺失合约注册（P5-6）**：v1 工具集包含但 v2 `toolbox.ts` 未注册的 6 个——
+`节点PoS` `0xDb11694Ed05Db4a6230BDFd0914094FE7CE73646`、
+`投票权PoS` `0xB17b6812f3Ed0eb0Df6e9F1D308C975B5daa8dC3`、
+`CJDAO多签` `0x7494Ba91644A692588AC1Bf8d12fAC45f88a54a6`、
+`Timelock0` `0x0De09367988C005518AEF0D23BB4170f0b9775E8`、
+`JTI2Config` `0x77136ef358f55E20E7d51259fa47D3D68C9324db`、
+`ecofund1` `0x50fe8f7cf122CFa689A634510C1b869E790f9760`。
+（v1 中 `Timelock0` / `节点PoS` / `投票权PoS` 在 `core/index.html` 为启用状态，在 `contractx` 为注释状态；以启用状态为准。）
 
 ### 2.2 其他 V1 功能页（评估是否纳入工具集入口）
 
 | 功能 | V1 页面 | V2 状态 | 说明 |
 |------|---------|---------|------|
 | Core 签到统计 | `coreCheckInInfo.html` | ✅ 已完成（`/core/checkin`，P2-1） | 入口卡片直达内页 |
-| JNS 域名查询 | `jnsInfo.html` | ✅ 已完成（`/jns`） | 入口卡片直达内页 |
-| JNSVote 投票 | `jnsVoteInfo.html` | ⏳ 未做（P3-1） | 规划卡片（即将推出） |
-| 链上红包 | `redpacketInfo.html` | ❌ 废弃（P4 结论） | 不迁移 |
-| CryptoJunks | `junksInfo.html` | ❌ 废弃（P4 结论） | 不迁移 |
-| 合约验证功能 | — | ❌ 废弃（P4 结论） | 不迁移 |
+| JNS 域名查询 | `jnsInfo.html` | 🟡 部分（`/jns`） | 缺 DID 页 / 打赏 / owner-only mint（P5-3） |
+| JNSVote 投票 | `jnsVoteInfo.html` | ✅ 已完成（P3-1） | v2 另有详情页与治理端 |
+| 链上红包 | `redpacketInfo.html` | ❌ **必须迁移（P5-5）** | ~~废弃~~ 已作废 |
+| CryptoJunks | `junksInfo.html` | ❌ **必须迁移（P5-4）** | ~~废弃~~ 已作废 |
+| 合约验证功能 | 地址页内嵌 | ❌ **必须迁移（P5-7）** | ~~废弃~~ 已作废；`ContractDeployment.vue` 的代码摘要比对不等于源码编译验证 |
+| DID 资料页 | `/#/did/:jnsId` | ❌ **必须迁移（P5-3）** | 原清单遗漏 |
 
 ---
 
@@ -64,7 +80,8 @@ V1 工具集入口（`jscan.jnsdao.com/tools/index.html`）为卡片式布局，
 1. **合约交互工具**（core + contractx → 统一"合约调用工具"）
    - viem 重写，去掉 web3.js 和外部 CDN 依赖
    - 支持自定义 ABI + 常用合约快捷入口
-   - 预估：4-6h
+   - 🟡 读写表单已迁（PR#9）；**事件查询/订阅面板未迁**（P5-6）；`contractx` 仍为外链（P5-6）
+   - 预估：4-6h（已用）+ 事件面板 + 自定义 ABI 约 2-3 天
 2. **默克尔证明生成器**（✅ 已完成，2026-08-05）
    - 纯前端逻辑迁移，成本低
    - V2 实现：`src/views/MerkleProofGenerator.vue` + `/tools/merkle` 路由
@@ -76,6 +93,8 @@ V1 工具集入口（`jscan.jnsdao.com/tools/index.html`）为卡片式布局，
 ### 第三步：V1 收尾
 
 - 工具全部迁移完成后，V1 `/tools` 入口下线或 301 → V2
+- ⚠️ **整体前置条件（2026-11-17）**：V1 全域下线/302 必须等 [`v1-parity-checklist.md`](./v1-parity-checklist.md)
+  清单 100% 打勾（含 P5-8 双跑对照）。工具集先行收尾可以，但流量切到 v2 需等全量对等。
 
 ---
 
