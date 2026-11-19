@@ -65,6 +65,22 @@
             <span class="label">大小</span>
             <span class="value">{{ block.size }} bytes</span>
           </div>
+          <div class="info-item">
+            <span class="label">确认数</span>
+            <span class="value">
+              <span class="conf-badge">{{ confirmations }} 个区块</span>
+            </span>
+          </div>
+          <div class="info-item info-item-tall" v-if="extraDataText !== null || block.extraData">
+            <span class="label">附加数据</span>
+            <span class="value">
+              <code class="hex-block">{{ block.extraData }}</code>
+              <span v-if="extraDataText" class="extra-text">解读：{{ extraDataText }}</span>
+              <span v-else-if="extraDataBytes > 0" class="muted extra-note">
+                {{ extraDataBytes }} 字节二进制数据，无可读文本
+              </span>
+            </span>
+          </div>
         </div>
       </div>
 
@@ -112,6 +128,10 @@
                 <span class="tx-value">{{ formatNumber(tx.gas) }}</span>
               </div>
             </div>
+            <div class="tx-input" v-if="hasInputData(tx.input)">
+              <span class="tx-label">输入数据</span>
+              <code class="hex-block">{{ tx.input }}</code>
+            </div>
           </div>
         </div>
       </div>
@@ -133,10 +153,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { publicClient } from '../config/client'
 import { formatNumber, formatAge } from '../utils/format'
+import { confirmationCount, decodeHexToText, hasInputData } from '../utils/block-detail'
 import { toolboxContracts } from '../contracts/toolbox'
 import { JvHashText, JvAmount, JvPageState } from '../design-system'
 
@@ -151,6 +172,15 @@ const props = defineProps<Props>()
 const block = ref<any>(null)
 const loading = ref(true)
 const blockNumber = ref(props.number)
+
+// 确认数需要「最新高度」，与区块本身是两个独立 RPC。
+// 最新高度拿不到时按 v1 行为显示 0，不让区块页整体失败。
+const latestBlockNumber = ref<bigint | null>(null)
+const confirmations = computed(() => confirmationCount(latestBlockNumber.value, block.value?.number))
+
+const extraDataDecoded = computed(() => decodeHexToText(block.value?.extraData))
+const extraDataText = computed(() => extraDataDecoded.value.text)
+const extraDataBytes = computed(() => extraDataDecoded.value.bytes)
 
 // B2：地址 → 可读标签（纯前端本地映射，来自 toolbox.ts 12 个合约）
 const contractLabelMap: Record<string, string> = {}
@@ -184,10 +214,16 @@ const viewTransaction = (txHash: string) => router.push(`/tx/${txHash}`)
 const loadBlock = async () => {
   loading.value = true
   try {
-    block.value = await publicClient.getBlock({
-      blockNumber: BigInt(props.number),
-      includeTransactions: true,
-    })
+    // 最新高度与区块内容互不依赖，并行取；确认数失败不拖垮主数据
+    const [blockResult, latest] = await Promise.all([
+      publicClient.getBlock({
+        blockNumber: BigInt(props.number),
+        includeTransactions: true,
+      }),
+      publicClient.getBlockNumber().catch(() => null),
+    ])
+    block.value = blockResult
+    latestBlockNumber.value = latest
   } catch (error) {
     console.error('Failed to fetch block:', error)
     block.value = null
@@ -335,6 +371,58 @@ onMounted(() => { loadBlock() })
 }
 
 .muted { color: var(--jv-text-muted); font-size: 0.82rem; }
+
+.info-item-tall {
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 6px;
+}
+.info-item-tall .value { max-width: 100%; width: 100%; }
+
+.conf-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: var(--jv-radius-md);
+  background: var(--jv-brand);
+  color: #fff;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.hex-block {
+  display: block;
+  width: 100%;
+  font-family: var(--jv-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: var(--jv-text-primary);
+  background: var(--jv-bg-surface);
+  border: 1px solid var(--jv-border);
+  border-radius: var(--jv-radius-sm, 4px);
+  padding: 6px 8px;
+  word-break: break-all;
+  white-space: pre-wrap;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.extra-text {
+  display: block;
+  margin-top: 6px;
+  color: var(--jv-text-primary);
+  font-size: 0.85rem;
+  word-break: break-all;
+}
+
+.extra-note { display: block; margin-top: 6px; }
+
+.tx-input {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.tx-input .hex-block { max-height: 96px; }
 
 .empty-section, .error-section {
   background: var(--jv-bg-surface);
