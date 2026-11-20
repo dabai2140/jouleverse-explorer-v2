@@ -2,7 +2,7 @@
 
 **文档日期**：2026-07-31  
 **维护人**：zhangxin / claude / 大白  
-**最近更新**：2026-11-20（大白：修 `ContractTool` revert 解码真实 bug + 抽 `utils/revert`，基线 276→290；2026-11-17 起项目目标修订为 v1 功能 100% 移植，P4「废弃功能」结论作废，新增 P5 对等补齐批次）  
+**最近更新**：2026-11-20（大白：基线 276→290→314→344；合入 revert 解码修复、区块详情对等、全局搜索输入解析三批；2026-11-17 起项目目标修订为 v1 功能 100% 移植，P4「废弃功能」结论作废）  
 **用途**：跟踪 v1 → v2 功能迁移进度 + 新功能规划，作为后续开发的唯一入口文档  
 
 > ⚠️ **目标已修订（2026-11-17，教链确认）**：项目目标从「MVP + 选择性移植 + 果断废弃」改为 **「v1 全部功能 100% 移植，尽快达到可替代 v1 的可用性」**。
@@ -167,12 +167,7 @@
 
 ---
 
-### ❌ P4 — 废弃功能评估（**已作废**，2026-11-17）
-
-> **原结论全部撤销**。原判依据「使用频率低 / 与浏览器核心定位不符 / 复杂度高」缺少量化支撑，
-> 且忽略了一个硬约束：**v1 只要还托管任何一个独占功能，就一天不能下线**。
-> 在「100% 对等替代 v1」目标下，这三项都进入 §二 P5 补齐批次。
-
+**最近更新**：2026-11-20（大白：修 `ContractTool` revert 解码真实 bug + 抽 `utils/revert`，基线 276→290；2026-11-17 起项目目标修订为 v1 功能 100% 移植，P4「废弃功能」结论作废，新增 P5 对等补齐批次）  
 | 功能 | 原规划建议 | **现结论** | 现依据 |
 |------|-----------|-----------|--------|
 | CryptoJunks NFT | 考虑废弃 | **必须移植**（P5-4） | 10000 枚铭文的唯一浏览入口，属链上资产浏览器本职；离线参照表（`punks/*.json`）无需额外 RPC |
@@ -188,7 +183,7 @@
 
 | 批次 | 内容 | 预估 | 状态 |
 |---|---|---|---|
-| **P5-1 浏览基础对等** | 首页 Free/Reserved Energy 四宫格、一键添加主网（EIP-3085）、全局搜索补全（区块哈希/40 位 hex/帮助弹层）、区块详情（确认数 + extraData + 交易输入数据）、交易详情（区块哈希 + **ABI 解码切换** + 地址标签 + gasPrice 双单位） | 1.5–2 天 | ⏳ 待开工 |
+| **P5-1 浏览基础对等** | ~~首页 Free/Reserved Energy 四宫格~~（⛔ 撤销，见下）、一键添加主网（EIP-3085）、全局搜索补全（五类输入 + 帮助弹层）、区块详情（确认数 + extraData + 交易输入数据）、交易详情（区块哈希 + **ABI 解码切换** + 地址标签 + gasPrice 双单位） | 1.5–2 天 | 🟡 进行中 |
 | **P5-2 地址页对等** | 资产面板补 Planet / FlyingJ / JNSDAO V（含 npub）/ CryptoJunks 墙；「新手加油 0.005 J」；WJ 发送与 JNS 转移支持 `.j` 解析 | 1.5–2 天 | ⏳ 待开工 |
 | **P5-3 JNS 对等** | `/#/did/:name` DID 页；打赏 endorse（1/2/5/10 + 手动 ≤100 WJ）；owner-only mint 入口 | 1–1.5 天 | ⏳ 待开工 |
 | **P5-4 CryptoJunks** | 全量浏览页：supply 状态 / 分页（100 一页）/ 铭文墙 / 标注说明 / 静态统计表 | 1–1.5 天 | ⏳ 待开工 |
@@ -196,6 +191,21 @@
 | **P5-6 工具集对等** | 合约工具补**事件查询/订阅面板**；补 6 个缺失合约注册（`节点PoS` / `投票权PoS` / `CJDAO多签` / `Timelock0` / `JTI2Config` / `ecofund1`）；**自定义 ABI 交互**（`/tools/custom`）并下线 `contractx` 外链 | 2–3 天 | ⏳ 待开工 |
 | **P5-7 合约验证** | 地址页合约源码展示 + solc Web Worker 编译比对（版本/optimizer/evmVersion 取自部署清单），复现 v1 的 `exactMatch / partialMatch` | 2–3 天 | ⏳ 待开工 |
 | **P5-8 切换就绪** | 全量回归 + v1/v2 双跑逐页对照 + 切换方案（301/302 + 公告） | 1–2 天 | ⏳ 待开工 |
+
+**P5-1 已完成项（2026-11-20）**：
+
+- ✅ 全局搜索五类输入解析（`src/utils/search-resolve.ts`，PR #95）——并修了两个实际 bug：
+  - 40 位全数字地址被 `/^\d+$/` 抢走当区块号（`1234567890…` 这类合法地址搜不到）；
+  - 无法识别时静默 `router.push('/block/<乱码>')`，用户只看到「区块不存在」。
+    现改为弹帮助面板列 5 类示例（示例可点击填入），并对 JVA 校验失败给出专门提示。
+  - **未移植「区块哈希搜索」**：v1 那条分支永不可达（`/[0-9a-zA-Z]{64}?/` 对区块哈希同样为真，
+    必然先命中 tx 分支），v1 从未真正支持过。详见对等清单 §二·二 核实纠错注。
+- ✅ 稳定运行补 `since block 0` 链接（时长呈现保持 v2，只补链接）
+- ✅ 首页最新区块补 `size` 字段（卡片式布局不回退，三个短数值紧凑横排）
+- ✅ 区块详情：确认数 / extraData / 交易输入数据（PR #93）
+- ⛔ 首页能量合计**撤销**（PR #92 已关闭）——`used` ≠ 流通、`available` ≠ 锁中，v1 语义站不住
+- ⏳ 一键添加主网（EIP-3085）
+- ⏳ 交易详情：区块哈希行 / ABI 解码切换 / 地址标签 / 双单位
 
 **每批硬性门禁**：`npm run build` EXIT 0（非 `vue-tsc --noEmit`）/ `npm test` 全绿 / `check-feature-roadmap.ts` 通过 / 新增纯逻辑配 spec 且做反向验证 / 真实链验证记录进 PR / 有 UI 改动做双主题验证。
 
@@ -277,14 +287,15 @@
 | 路线图**状态词**一致性 | `tests/roadmap-status.spec.ts` 7 条（真实仓库 1 / 反向 3：未上线却已接线、待审核发布却已接线、已完成但路由不存在 / 正向 3：未上线且未接线、已完成且路由存在、无路由声明不误伤）。判据可执行：登记「待审/未上线」的模块其路由不应出现在 `src/router/index.ts`，「✅ 已完成」的模块声明路由必须真实存在 | ✅ 已合入 | PR #77（444ad6d）|
 | 区块详情页对等字段（确认数 / extraData / 输入数据）| `tests/block-detail.spec.ts` 18 条纯函数用例（确认数 bigint 减法 / hex 解码 0x 前缀与大小写 / 不可打印字节判定 / 输入数据判据 / 折行）+ `tests/block-detail-view.spec.ts` 6 条视图用例（确认数呈现 / 不可读 extraData 不吐乱码 / 可读 extraData 给解读 / 纯转账不展示输入数据 / 最新高度失败时降级为 0 不拖垮页面 / 区块不存在不渲染确认数）。反向注入两次：Number 相减 → 1 failed，不剥 0x → 6 failed，去掉 `v-if` 输入数据判据 → 1 failed，均部分红 | ✅ 本分支 | 本 PR |
 | 组件层用例（JNSVote 指南）| `tests/jnsvote-guide.spec.ts` 4 条（非签名人提示中性化 / 签名人无提示 / 步骤区为 `<ol>` 非完成态 / `DECISION_RULE_DISPLAY` 与判据同源）。**注意：这只补了一个组件，`src/components/` 整体仍无门禁**——`check-feature-roadmap.ts` 只扫 `src/views/`、`route-gap.spec.ts` 也只遍历 views，新增组件既不需登记路线图也不需写测试即可三道闸全绿（PR #87 期间实测确认） | ✅ 已合入 | PR #87（1a38ae7）|
-| 合约工具 revert 解码 | `tests/revert-decode.spec.ts` 14 条（Error(string) 5 条含 UTF-8/32 字节边界 + Panic 映射 5 条 + 兜底健壮性 2 条 + 边界 2 条）。修复 `ContractTool.vue` 抽取到 `src/utils/revert.ts` 时发现的**真实解码 bug**：`Error(string)` 分支偏移量多算一格，任何标准 revert 消息都解成空串（详见下方教训）| ✅ 已合入 | 本 PR |
+| 合约工具 revert 解码 | `tests/revert-decode.spec.ts` 14 条（Error(string) 5 条含 UTF-8/32 字节边界 + Panic 映射 5 条 + 兜底健壮性 2 条 + 边界 2 条）。修复 `ContractTool.vue` 抽取到 `src/utils/revert.ts` 时发现的**真实解码 bug**：`Error(string)` 分支偏移量多算一格，任何标准 revert 消息都解成空串（详见下方教训）| ✅ 已合入 | PR #90 |
+| 全局搜索输入解析 | `tests/search-resolve.spec.ts` 30 条（JNS/HEX/B32/交易/区块号五类 + 无法识别 + 帮助示例自校验）。抽自 `Home.vue handleSearch` 内联分支，改为 `src/utils/search-resolve.ts` 纯函数。修了两个真 bug：① 40 位全数字地址被 `/^\d+$/` 抢走当区块号；② 无法识别时静默 `push('/block/<乱码>')` | ✅ 已合入 | PR #95 |
 
-**当前基线**（`explorer-v2` 分支 `331793d`（#90 合入后），2026-11-20 实测）：`npm run build` EXIT 0 / `vitest run` **314 passed**（26 files）/ `node --test tests/jvaddress.test.ts` **3 passed**（合计 **317** 条）。
+**当前基线**（`explorer-v2` 分支 `98ea294`（#93 合入后），2026-11-20 实测）：`npm run build` EXIT 0 / `vitest run` **344 passed**（27 files）/ `node --test tests/jvaddress.test.ts` **3 passed**（合计 **347** 条）。
 
-> 基线演进：13（PR #51~#54 前）→ **22**（PR #56 theme store 9 条）→ **29**（PR #62 gov-pending-ids 7 条）→ **209**（PR #69 路线图检查器 + 之前各批用例）→ **260**（PR #75 前实测，20 files）→ **267**（PR #77 roadmap-status 7 条，21 files）→ **272**（PR #76 路由可达性净增 2 条 + 部署基线冻结 3 条，22 files）→ **276**（PR #87 补 `tests/jnsvote-guide.spec.ts` 4 条，23 files）→ **290**（`tests/revert-decode.spec.ts` 14 条，24 files）→ **314**（区块详情页对等：`tests/block-detail.spec.ts` 18 条 + `tests/block-detail-view.spec.ts` 6 条，26 files）。
+> 基线演进：13（PR #51~#54 前）→ **22**（PR #56 theme store 9 条）→ **29**（PR #62 gov-pending-ids 7 条）→ **209**（PR #69 路线图检查器 + 之前各批用例）→ **260**（PR #75 前实测，20 files）→ **267**（PR #77 roadmap-status 7 条，21 files）→ **272**（PR #76 路由可达性净增 2 条 + 部署基线冻结 3 条，22 files）→ **276**（PR #87 补 `tests/jnsvote-guide.spec.ts` 4 条，23 files）→ **290**（`tests/revert-decode.spec.ts` 14 条，24 files）→ **314**（区块详情页对等：`tests/block-detail.spec.ts` 18 条 + `tests/block-detail-view.spec.ts` 6 条，26 files）→ **344**（全局搜索输入解析：`tests/search-resolve.spec.ts` 30 条，27 files）。
 > 上表各项现全部为「已合入」。**2026-10-30 这批（#57/#58/#56/#59）与 2026-11-03 这批（#60/#61/#62）均已全部 merge**；#76 与 #77 于 2026-11-13 合入，#87 于 2026-11-15 合入；open PR 仅剩 **#78**（维持不合入，待作者在独立 repo 落地自持地址表/可安装/补 LICENSE）。
 >
-> ⚠️ 计数口径提醒：`npm test` = vitest **314** + node:test 3 = **317 条**。写 PR 描述或文档时别只抄 vitest 数字又说「npm test N passed」——PR #62 描述里写「vitest 22 passed」就是这个错（当时实际已是 29）。
+> ⚠️ 计数口径提醒：`npm test` = vitest **344** + node:test 3 = **347 条**。写 PR 描述或文档时别只抄 vitest 数字又说「npm test N passed」——PR #62 描述里写「vitest 22 passed」就是这个错（当时实际已是 29）。
 > ⚠️ 本基线在 2026-11-03 之后长期未更新（一直写 29 passed），11-10 / 11-11 两次实测发现落后 200+ 条。**凡测试用例数有变化，当次 PR 必须同批更新此行。**
 
 **两条必须记住的规则**：

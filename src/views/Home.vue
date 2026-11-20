@@ -21,6 +21,8 @@
         <div class="stat-pill" v-if="networkUptime">
           <span class="pill-label">稳定运行</span>
           <span class="pill-value">{{ networkUptime }}</span>
+          <!-- 自创世块起算。v1 把这段时长链到 block 0，v2 原来只显示时长、点不动 -->
+          <router-link to="/block/0" class="pill-link" title="查看创世区块">since block 0</router-link>
         </div>
         <div class="stat-pill" v-if="wsConnected">
           <span class="pill-label">实时推送</span>
@@ -45,6 +47,21 @@
           {{ t('quickLinks') }}<router-link to="/jns" class="quick-link">{{ t('navJnsQuery') }}</router-link>
           <router-link to="/domains" class="quick-link">{{ t('navEntry') }}</router-link>
           <router-link to="/tools" class="quick-link">{{ t('navTools') }}</router-link>
+        </div>
+
+        <!-- 无法识别的搜索词：给出「该怎么写」的示例，而不是跳到「区块不存在」 -->
+        <div v-if="searchHelpVisible" class="search-help" role="alert">
+          <div class="search-help-head">
+            <span class="search-help-title">{{ searchHelpTitle }}</span>
+            <button class="search-help-close" aria-label="关闭帮助" @click="dismissSearchHelp">×</button>
+          </div>
+          <p class="search-help-intro">可以试试输入以下内容：</p>
+          <ul class="search-help-list">
+            <li v-for="item in SEARCH_HELP_EXAMPLES" :key="item.label">
+              <span class="search-help-label">{{ item.label }}</span>
+              <code class="search-help-example" @click="fillSearchExample(item.example)">{{ item.example }}</code>
+            </li>
+          </ul>
         </div>
       </div>
 
@@ -102,17 +119,24 @@
               </div>
             </div>
             <div class="block-card-body">
-              <div class="meta-row">
+              <!-- 哈希长度不可压缩，独占一行；三个短数值放在下一行等宽分栏 -->
+              <div class="meta-row meta-row--hash">
                 <span class="muted">哈希</span>
                 <JvHashText :value="block.hash" type="block" :truncate="8" :linkable="false" :copyable="false" />
               </div>
-              <div class="meta-row">
-                <span class="muted">交易数</span>
-                <span>{{ block.transactions.length }}</span>
-              </div>
-              <div class="meta-row">
-                <span class="muted">Gas</span>
-                <span>{{ formatNumber(block.gasUsed) }}</span>
+              <div class="block-card-stats">
+                <div class="meta-row">
+                  <span class="muted">交易数</span>
+                  <span>{{ block.transactions.length }}</span>
+                </div>
+                <div class="meta-row">
+                  <span class="muted">Gas</span>
+                  <span>{{ formatNumber(block.gasUsed) }}</span>
+                </div>
+                <div class="meta-row">
+                  <span class="muted">大小</span>
+                  <span>{{ block.size }} bytes</span>
+                </div>
               </div>
             </div>
           </div>
@@ -126,14 +150,18 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { isAddress, formatUnits } from 'viem'
+import { formatUnits } from 'viem'
 import type { Block as ViemBlock } from 'viem'
 import { watchBlocks } from 'viem/actions'
 import { formatAge, formatNumber } from '../utils/format'
 import { timelockABI, TIMELOCK_CORE_ADDRESS, TIMELOCK_ECO_ADDRESS } from '../contracts/timelock'
 import type { TimelockData } from '../contracts/timelock'
 import { publicClient, wsPublicClient } from '../config/client'
-import { detectAddressFormat } from '../utils/jvaddress'
+import {
+  resolveSearchInput,
+  SEARCH_HELP_EXAMPLES,
+  type SearchUnknownReason,
+} from '../utils/search-resolve'
 import { JvLoading, JvPageState, JvHashText } from '../design-system'
 import { t } from '../i18n'
 
@@ -145,6 +173,8 @@ interface Block {
   timestamp: number
   transactions: string[]
   gasUsed: bigint
+  /** 区块字节大小（v1 最新区块表有 Size 列）。viem 给的是 bigint */
+  size: bigint
   isNew?: boolean
 }
 
@@ -241,6 +271,7 @@ const fetchLatestBlocks = async () => {
         timestamp: Number(fetched[0].timestamp),
         transactions: fetched[0].transactions as string[],
         gasUsed: fetched[0].gasUsed,
+        size: fetched[0].size,
       }
       const diff = Math.floor(Date.now() / 1000) - Number(fetched[0].timestamp)
       networkStatus.value = diff < 300 ? 'online' : 'offline'
@@ -251,6 +282,7 @@ const fetchLatestBlocks = async () => {
       timestamp: Number(b!.timestamp),
       transactions: b!.transactions as string[],
       gasUsed: b!.gasUsed,
+      size: b!.size,
     }))
   } catch { networkStatus.value = 'offline' }
   finally { loading.value = false }
@@ -283,6 +315,7 @@ const handleNewBlock = (b: ViemBlock, markNew: boolean) => {
     timestamp: Number(b.timestamp),
     transactions: (b.transactions as string[]) || [],
     gasUsed: b.gasUsed,
+    size: b.size,
     isNew: markNew,
   }
   latestBlock.value = newBlock
@@ -298,14 +331,42 @@ const handleNewBlock = (b: ViemBlock, markNew: boolean) => {
   }
 }
 
+// 搜索框：解析逻辑抽在 utils/search-resolve.ts（纯函数 + 30 条用例），
+// 这里只负责「解析结果 → 路由」和无法识别时的帮助提示。
+// 改动前的问题：40 位 hex 地址会先命中 /^\d+$/ 被当区块号；无法识别时静默
+// push(`/block/<乱码>`)，用户看到「区块不存在」却不知道自己错在哪。
+const searchHelpVisible = ref(false)
+const searchHelpReason = ref<SearchUnknownReason | null>(null)
+
+const searchHelpTitle = computed(() => {
+  if (searchHelpReason.value === 'empty') return '请输入要搜索的内容'
+  if (searchHelpReason.value === 'invalid-jva') return '这个 JVA / B32 地址校验不通过'
+  return `不知道如何处理搜索词「${searchQuery.value.trim()}」`
+})
+
+const dismissSearchHelp = () => { searchHelpVisible.value = false }
+
+const fillSearchExample = (example: string) => {
+  searchQuery.value = example
+  dismissSearchHelp()
+}
+
 const handleSearch = () => {
-  const q = searchQuery.value.trim()
-  if (!q) return
-  if (q.toLowerCase().endsWith('.j')) { router.push(`/jns?domain=${q}`); return }
-  if (/^\d+$/.test(q)) { router.push(`/block/${q}`); return }
-  if (q.length === 66 && q.startsWith('0x')) { router.push(`/tx/${q}`); return }
-  if (isAddress(q) || detectAddressFormat(q) !== 'unknown') { router.push(`/address/${q}`); return }
-  router.push(`/block/${q}`)
+  const r = resolveSearchInput(searchQuery.value)
+
+  if (r.kind === 'unknown') {
+    // 空输入本来就不该弹帮助（用户只是不小心按了回车）
+    searchHelpVisible.value = r.reason !== 'empty'
+    searchHelpReason.value = r.reason ?? null
+    return
+  }
+
+  searchHelpVisible.value = false
+
+  if (r.kind === 'jns') { router.push(`/jns?domain=${encodeURIComponent(r.value)}`); return }
+  if (r.kind === 'tx') { router.push(`/tx/${r.value}`); return }
+  if (r.kind === 'address') { router.push(`/address/${r.value}`); return }
+  router.push(`/block/${r.value}`)
 }
 
 onMounted(() => { fetchLatestBlocks(); fetchAllTimelockData(); setupBlockWatch() })
@@ -375,6 +436,15 @@ onUnmounted(() => { unwatchBlocks?.() })
 .pill-value { color: var(--jv-text-primary); font-weight: 600; }
 .ws-live { color: var(--jv-success); }
 
+/* 稳定运行 pill 里的「since block 0」链接：跟随 pill 字号，不撑高 */
+.pill-link {
+  color: var(--jv-link);
+  text-decoration: none;
+  font-size: 0.78rem;
+  border-bottom: 1px dashed currentColor;
+}
+.pill-link:hover { color: var(--jv-link-hover); border-bottom-style: solid; }
+
 /* ── Content ── */
 .content { display: flex; flex-direction: column; gap: 24px; }
 
@@ -433,6 +503,74 @@ onUnmounted(() => { unwatchBlocks?.() })
   margin-left: 6px;
 }
 .quick-link:hover { text-decoration: underline; color: var(--jv-link-hover); }
+
+/* 搜索帮助面板：只在解析失败时出现，用侧边竖线而非红框，
+   因为「没搜到」多数不是错误，只是格式不认识 */
+.search-help {
+  max-width: 640px;
+  margin-top: 14px;
+  padding: 14px 16px;
+  border-left: 3px solid var(--jv-link);
+  border-radius: var(--jv-radius-sm, 6px);
+  background: var(--jv-bg-subtle);
+}
+
+.search-help-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.search-help-title {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--jv-text-primary);
+  word-break: break-all;
+}
+
+.search-help-close {
+  flex: none;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 1.1rem;
+  line-height: 1;
+  padding: 0 4px;
+  color: var(--jv-text-muted);
+}
+.search-help-close:hover { color: var(--jv-text-primary); }
+
+.search-help-intro {
+  margin: 8px 0 6px;
+  font-size: 0.84rem;
+  color: var(--jv-text-muted);
+}
+
+.search-help-list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 0.84rem;
+  color: var(--jv-text-primary);
+}
+.search-help-list li { margin: 5px 0; }
+
+.search-help-label {
+  display: inline-block;
+  min-width: 96px;
+  color: var(--jv-text-muted);
+}
+
+.search-help-example {
+  cursor: pointer;
+  font-family: var(--jv-font-mono, ui-monospace, monospace);
+  font-size: 0.8rem;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--jv-bg-surface);
+  word-break: break-all;
+}
+.search-help-example:hover { color: var(--jv-link); text-decoration: underline; }
 
 /* ── Panel ── */
 .panel {
@@ -556,10 +694,23 @@ onUnmounted(() => { unwatchBlocks?.() })
 .muted { color: var(--jv-text-muted); font-size: 0.85rem; }
 
 .block-card-body {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  display: flex;
+  flex-direction: column;
   gap: 6px;
 }
+
+/* 哈希行：标签与值紧邻（不 space-between 拉到两端，否则标签与值视觉上失联） */
+.meta-row--hash { justify-content: flex-start; gap: 12px; }
+.meta-row--hash > :last-child { overflow: hidden; text-overflow: ellipsis; }
+
+/* 三个短数值：紧凑横排、按内容宽度，宽度不够时整体折行。
+   不用 auto-fit 1fr —— 那会把 3 个短值均分到整行，标签与自己的值隔着半个屏幕。 */
+.block-card-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 28px;
+}
+.block-card-stats .meta-row { gap: 6px; }
 
 .meta-row {
   display: flex;
