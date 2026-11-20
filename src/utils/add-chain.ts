@@ -31,7 +31,7 @@ export const JOULEVERSE_CHAIN_ID_DECIMAL = 3666
 /** 与 src/config/chain.ts 同源的参数（此处独立声明是为了不引入依赖，便于纯函数测试） */
 export const JOULEVERSE_ADD_CHAIN_PARAMS: AddChainParams = {
   chainId: JOULEVERSE_CHAIN_ID_HEX,
-  chainName: 'Jouleverse Mainnet',
+  chainName: 'Jouleverse',
   nativeCurrency: { name: 'Joule', symbol: 'J', decimals: 18 },
   rpcUrls: ['https://rpc.jnsdao.com'],
   blockExplorerUrls: ['https://jscan.jnsdao.com'],
@@ -39,7 +39,7 @@ export const JOULEVERSE_ADD_CHAIN_PARAMS: AddChainParams = {
 
 /** 手工添加网络时给用户抄的参数（v1 在切换失败弹层的同款文案） */
 export const MANUAL_CHAIN_HINT = {
-  networkName: 'Jouleverse Mainnet',
+  networkName: 'Jouleverse',
   rpcUrl: 'https://rpc.jnsdao.com',
   wsUrl: 'wss://rpc.jnsdao.com/ws',
   chainId: String(JOULEVERSE_CHAIN_ID_DECIMAL),

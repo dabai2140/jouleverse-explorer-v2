@@ -1,6 +1,6 @@
 export const jouleverseChain = {
   id: 3666,
-  name: 'Jouleverse Mainnet',
+  name: 'Jouleverse',
   nativeCurrency: {
     name: 'J',
     symbol: 'J',
