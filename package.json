@@ -12,7 +12,9 @@
     "smoke:jns": "node scripts/smoke-jns-domains.mjs",
     "smoke:core-assets": "node scripts/smoke-core-assets.mjs",
     "test:jvaddress": "node --test tests/jvaddress.test.ts",
-    "smoke:proposal-detail": "node scripts/smoke-jnsvote-proposal-detail.mjs"
+    "smoke:proposal-detail": "node scripts/smoke-jnsvote-proposal-detail.mjs",
+    "check:roadmap": "node scripts/check-feature-roadmap.ts",
+    "check:baseline": "node scripts/check-test-baseline.ts --run"
   },
   "dependencies": {
     "@wagmi/connectors": "^8.0.0",

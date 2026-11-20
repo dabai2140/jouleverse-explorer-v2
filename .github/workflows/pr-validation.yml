@@ -38,5 +38,9 @@ jobs:
         run: node scripts/check-feature-roadmap.ts
       - name: Run tests
         run: npm test
+      # 基线门禁（2026-11-16）：用例数必须与 docs/feature-roadmap.md 的「当前基线」行逐项一致。
+      # 放在 npm test 之后、build 之前：测试本身挂了先报测试，不浪费在数字校对上。
+      - name: Check test baseline matches docs
+        run: npm run check:baseline
       - name: Build with project type checking
         run: npm run build

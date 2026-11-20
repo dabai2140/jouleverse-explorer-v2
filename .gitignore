@@ -43,3 +43,6 @@ accounts.json
 # 有人改动配置后污染工作区。*.tsbuildinfo 为 PR #25 补充的通配兜底）
 tsconfig.tsbuildinfo
 *.tsbuildinfo
+
+# 基线门禁产物（scripts/check-test-baseline.ts）
+.test-artifacts
