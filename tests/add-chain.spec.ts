@@ -63,7 +63,7 @@ describe('switchOrAddChain — 未添加该链（4902）', () => {
     expect(addReq.method).toBe('wallet_addEthereumChain')
     const params = addReq.params[0]
     expect(params.chainId).toBe('0xe52')
-    expect(params.chainName).toBe('Jouleverse Mainnet')
+    expect(params.chainName).toBe('Jouleverse')
     expect(params.nativeCurrency).toEqual({ name: 'Joule', symbol: 'J', decimals: 18 })
     expect(params.rpcUrls).toEqual(['https://rpc.jnsdao.com'])
     expect(params.blockExplorerUrls).toEqual(['https://jscan.jnsdao.com'])
@@ -140,6 +140,27 @@ describe('常量一致性', () => {
   it('chainId 的 hex 与 decimal 指同一条链', () => {
     expect(parseInt(JOULEVERSE_CHAIN_ID_HEX, 16)).toBe(JOULEVERSE_CHAIN_ID_DECIMAL)
     expect(JOULEVERSE_CHAIN_ID_DECIMAL).toBe(3666)
+  })
+
+  // 回归用例（2026-11-20 教链指出）：钱包里已按「Jouleverse」建过网络，
+  // 而 wallet_addEthereumChain 传「Jouleverse Mainnet」会被当成另一条新链再添一遍。
+  // 锁死网络名为「Jouleverse」，不要带 Mainnet 后缀。
+  it('网络名是「Jouleverse」，不带 Mainnet 后缀', () => {
+    expect(JOULEVERSE_ADD_CHAIN_PARAMS.chainName).toBe('Jouleverse')
+    expect(JOULEVERSE_ADD_CHAIN_PARAMS.chainName).not.toContain('Mainnet')
+    expect(MANUAL_CHAIN_HINT.networkName).toBe('Jouleverse')
+    expect(MANUAL_CHAIN_HINT.networkName).not.toContain('Mainnet')
+  })
+
+  it('RPC 是不带显式端口的正式端点（不能出现 :8503 / :8505 或其它端口）', () => {
+    for (const url of [...JOULEVERSE_ADD_CHAIN_PARAMS.rpcUrls, MANUAL_CHAIN_HINT.rpcUrl, MANUAL_CHAIN_HINT.wsUrl]) {
+      const { protocol, host, port } = new URL(url)
+      expect(['https:', 'wss:']).toContain(protocol)
+      expect(host).toBe('rpc.jnsdao.com')
+      expect(port, `${url} 不应带显式端口`).toBe('')
+    }
+    expect(JOULEVERSE_ADD_CHAIN_PARAMS.rpcUrls).toEqual(['https://rpc.jnsdao.com'])
+    expect(MANUAL_CHAIN_HINT.wsUrl).toBe('wss://rpc.jnsdao.com/ws')
   })
 
   it('手工提示里的参数与 EIP-3085 参数同源（不会出现两处不一致）', () => {
