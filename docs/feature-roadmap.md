@@ -2,7 +2,7 @@
 
 **文档日期**：2026-07-31  
 **维护人**：zhangxin / claude / 大白  
-**最近更新**：2026-11-17（大白：**项目目标修订**——v1 功能 100% 移植，P4「废弃功能」结论作废，新增 P5 对等补齐批次）  
+**最近更新**：2026-11-20（大白：修 `ContractTool` revert 解码真实 bug + 抽 `utils/revert`，基线 276→290；2026-11-17 起项目目标修订为 v1 功能 100% 移植，P4「废弃功能」结论作废，新增 P5 对等补齐批次）  
 **用途**：跟踪 v1 → v2 功能迁移进度 + 新功能规划，作为后续开发的唯一入口文档  
 
 > ⚠️ **目标已修订（2026-11-17，教链确认）**：项目目标从「MVP + 选择性移植 + 果断废弃」改为 **「v1 全部功能 100% 移植，尽快达到可替代 v1 的可用性」**。
@@ -278,7 +278,7 @@
 | 组件层用例（JNSVote 指南）| `tests/jnsvote-guide.spec.ts` 4 条（非签名人提示中性化 / 签名人无提示 / 步骤区为 `<ol>` 非完成态 / `DECISION_RULE_DISPLAY` 与判据同源）。**注意：这只补了一个组件，`src/components/` 整体仍无门禁**——`check-feature-roadmap.ts` 只扫 `src/views/`、`route-gap.spec.ts` 也只遍历 views，新增组件既不需登记路线图也不需写测试即可三道闸全绿（PR #87 期间实测确认） | ✅ 已合入 | PR #87（1a38ae7）|
 | 合约工具 revert 解码 | `tests/revert-decode.spec.ts` 14 条（Error(string) 5 条含 UTF-8/32 字节边界 + Panic 映射 5 条 + 兜底健壮性 2 条 + 边界 2 条）。修复 `ContractTool.vue` 抽取到 `src/utils/revert.ts` 时发现的**真实解码 bug**：`Error(string)` 分支偏移量多算一格，任何标准 revert 消息都解成空串（详见下方教训）| ✅ 已合入 | 本 PR |
 
-**当前基线**（`explorer-v2` 分支 `402280d`，2026-11-17 实测）：`npm run build` EXIT 0 / `vitest run` **290 passed**（24 files）/ `node --test tests/jvaddress.test.ts` **3 passed**（合计 **293** 条）。
+**当前基线**（`explorer-v2` 分支 `2afd6d9`（#91/#94 合入后），2026-11-20 实测）：`npm run build` EXIT 0 / `vitest run` **290 passed**（24 files）/ `node --test tests/jvaddress.test.ts` **3 passed**（合计 **293** 条）。
 
 > 基线演进：13（PR #51~#54 前）→ **22**（PR #56 theme store 9 条）→ **29**（PR #62 gov-pending-ids 7 条）→ **209**（PR #69 路线图检查器 + 之前各批用例）→ **260**（PR #75 前实测，20 files）→ **267**（PR #77 roadmap-status 7 条，21 files）→ **272**（PR #76 路由可达性净增 2 条 + 部署基线冻结 3 条，22 files）→ **276**（PR #87 补 `tests/jnsvote-guide.spec.ts` 4 条，23 files）→ **290**（`tests/revert-decode.spec.ts` 14 条，24 files）。
 > 上表各项现全部为「已合入」。**2026-10-30 这批（#57/#58/#56/#59）与 2026-11-03 这批（#60/#61/#62）均已全部 merge**；#76 与 #77 于 2026-11-13 合入，#87 于 2026-11-15 合入；open PR 仅剩 **#78**（维持不合入，待作者在独立 repo 落地自持地址表/可安装/补 LICENSE）。
