@@ -7,6 +7,25 @@
 
 ---
 
+## ⚠️ 目标修订声明（2026-11-17，本文件部分章节已失效）
+
+> **教链 2026-11-17 指示**：v1 全部功能 **100% 移植**，尽快达到可替代 v1 的可用性。
+>
+> 本文件下文中的「其他功能」与阶段 5 迁移清单里的「考虑废弃」判定**全部作废**：
+> CryptoJunks NFT、Redpacket 红包、合约验证三项均改为 **必须移植**。
+>
+> 当前有效的范围/进度基线：
+>
+> | 文件 | 作用 |
+> |---|---|
+> | [`docs/v1-parity-checklist.md`](./v1-parity-checklist.md) | **对等基线**：v1 全量路由、字段级差异、P5-1~P5-8 批次、验收判据 |
+> | [`docs/feature-roadmap.md`](./feature-roadmap.md) | **状态追踪主表** |
+> | [`AGENTS.md`](../AGENTS.md) | 工程门禁 |
+>
+> 本文件保留作为历史技术评估（技术栈对比、技术债分析部分仍然有效），不再维护更新。
+
+---
+
 ## 📊 现状分析
 
 ### 当前技术栈
@@ -44,6 +63,12 @@
 - ✅ **Redpacket** 红包功能
 - ✅ **Timelock** 能量释放信息展示
 - ✅ **合约验证** 多合约验证功能（JNS、FlyingJ、CryptoJunks）
+
+> ⚠️ 以上三项（CryptoJunks / Redpacket / 合约验证）在 2026-11-17 目标修订后均为**必须移植**。
+> 另，下列 v1 能力本表当时也未列出，同样属对等范围：
+> `/#/did/:jnsId` DID 页、首页 Free/Reserved Energy、一键添加主网（EIP-3085）、
+> 交易页 ABI 解码、JNS 打赏、地址页「新手加油」、`.j` 地址解析、
+> 工具集事件订阅面板与自定义 ABI 交互。详见 [`docs/v1-parity-checklist.md`](./v1-parity-checklist.md)。
 
 ### 现有代码问题
 
@@ -544,11 +569,12 @@ export function useMetaMask() {
 
 ##### 阶段 5：其他功能迁移（2 周）
 
-**迁移清单**：
-- [ ] CryptoJunks NFT
-- [ ] Redpacket 红包
-- [ ] 合约验证
-- [ ] Timelock 信息
+**迁移清单**（2026-11-17 修订：原「考虑废弃」全部改为必须移植，并按 P5 批次重排）：
+- [ ] CryptoJunks NFT → **P5-4（必须）**
+- [ ] Redpacket 红包 → **P5-5（必须）**
+- [ ] 合约验证 → **P5-7（必须）**
+- [x] Timelock 信息（已完成）
+- [ ] 另需补齐（原清单遗漏，见 `v1-parity-checklist.md`）：`/#/did/:jnsId`、首页 Free/Reserved Energy、一键添加主网、ABI 解码、JNS 打赏、新手加油、`.j` 地址解析、事件订阅面板、自定义 ABI 交互 → **P5-1 / P5-2 / P5-3 / P5-6**
 
 **验收标准**：
 - ✅ 所有功能正常工作
