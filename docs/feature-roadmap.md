@@ -2,7 +2,7 @@
 
 **文档日期**：2026-07-31  
 **维护人**：zhangxin / claude / 大白  
-**最近更新**：2026-11-17（大白：**项目目标修订**——v1 功能 100% 移植，P4「废弃功能」结论作废，新增 P5 对等补齐批次）  
+**最近更新**：2026-11-20（大白：修 `ContractTool` revert 解码真实 bug + 抽 `utils/revert`，基线 276→290；2026-11-17 起项目目标修订为 v1 功能 100% 移植，P4「废弃功能」结论作废，新增 P5 对等补齐批次）  
 **用途**：跟踪 v1 → v2 功能迁移进度 + 新功能规划，作为后续开发的唯一入口文档  
 
 > ⚠️ **目标已修订（2026-11-17，教链确认）**：项目目标从「MVP + 选择性移植 + 果断废弃」改为 **「v1 全部功能 100% 移植，尽快达到可替代 v1 的可用性」**。
@@ -276,19 +276,26 @@
 | 部署基线常量冻结 | 2026-11-09 审计实测盲区：`deployment-verification.spec.ts` 的 reader 默认值取 `baselineBlock.hash` 再喂回被测代码，基线常量本身无守护——把 WJ 摘要末位 `…1e89` 改 `…1e88` 仍 5 passed 全绿。新增 `tests/deployment-baseline-frozen.spec.ts` 3 条，用独立副本冻结三地址摘要 + 基线块号/哈希，改基线必须双改、CR 可见 | ✅ 已合入 | PR #76（6447b43）|
 | 路线图**状态词**一致性 | `tests/roadmap-status.spec.ts` 7 条（真实仓库 1 / 反向 3：未上线却已接线、待审核发布却已接线、已完成但路由不存在 / 正向 3：未上线且未接线、已完成且路由存在、无路由声明不误伤）。判据可执行：登记「待审/未上线」的模块其路由不应出现在 `src/router/index.ts`，「✅ 已完成」的模块声明路由必须真实存在 | ✅ 已合入 | PR #77（444ad6d）|
 | 组件层用例（JNSVote 指南）| `tests/jnsvote-guide.spec.ts` 4 条（非签名人提示中性化 / 签名人无提示 / 步骤区为 `<ol>` 非完成态 / `DECISION_RULE_DISPLAY` 与判据同源）。**注意：这只补了一个组件，`src/components/` 整体仍无门禁**——`check-feature-roadmap.ts` 只扫 `src/views/`、`route-gap.spec.ts` 也只遍历 views，新增组件既不需登记路线图也不需写测试即可三道闸全绿（PR #87 期间实测确认） | ✅ 已合入 | PR #87（1a38ae7）|
+| 合约工具 revert 解码 | `tests/revert-decode.spec.ts` 14 条（Error(string) 5 条含 UTF-8/32 字节边界 + Panic 映射 5 条 + 兜底健壮性 2 条 + 边界 2 条）。修复 `ContractTool.vue` 抽取到 `src/utils/revert.ts` 时发现的**真实解码 bug**：`Error(string)` 分支偏移量多算一格，任何标准 revert 消息都解成空串（详见下方教训）| ✅ 已合入 | 本 PR |
 
-**当前基线**（`explorer-v2` 分支 `3a04e94`（#87 合入后），2026-11-16 实测）：`npm run build` EXIT 0 / `vitest run` **276 passed**（23 files）/ `node --test tests/jvaddress.test.ts` **3 passed**（合计 **279** 条）。
+**当前基线**（`explorer-v2` 分支 `2afd6d9`（#91/#94 合入后），2026-11-20 实测）：`npm run build` EXIT 0 / `vitest run` **290 passed**（24 files）/ `node --test tests/jvaddress.test.ts` **3 passed**（合计 **293** 条）。
 
-> 基线演进：13（PR #51~#54 前）→ **22**（PR #56 theme store 9 条）→ **29**（PR #62 gov-pending-ids 7 条）→ **209**（PR #69 路线图检查器 + 之前各批用例）→ **260**（PR #75 前实测，20 files）→ **267**（PR #77 roadmap-status 7 条，21 files）→ **272**（PR #76 路由可达性净增 2 条 + 部署基线冻结 3 条，22 files）→ **276**（PR #87 补 `tests/jnsvote-guide.spec.ts` 4 条，23 files）。
+> 基线演进：13（PR #51~#54 前）→ **22**（PR #56 theme store 9 条）→ **29**（PR #62 gov-pending-ids 7 条）→ **209**（PR #69 路线图检查器 + 之前各批用例）→ **260**（PR #75 前实测，20 files）→ **267**（PR #77 roadmap-status 7 条，21 files）→ **272**（PR #76 路由可达性净增 2 条 + 部署基线冻结 3 条，22 files）→ **276**（PR #87 补 `tests/jnsvote-guide.spec.ts` 4 条，23 files）→ **290**（`tests/revert-decode.spec.ts` 14 条，24 files）。
 > 上表各项现全部为「已合入」。**2026-10-30 这批（#57/#58/#56/#59）与 2026-11-03 这批（#60/#61/#62）均已全部 merge**；#76 与 #77 于 2026-11-13 合入，#87 于 2026-11-15 合入；open PR 仅剩 **#78**（维持不合入，待作者在独立 repo 落地自持地址表/可安装/补 LICENSE）。
 >
-> ⚠️ 计数口径提醒：`npm test` = vitest **276** + node:test 3 = **279 条**。写 PR 描述或文档时别只抄 vitest 数字又说「npm test N passed」——PR #62 描述里写「vitest 22 passed」就是这个错（当时实际已是 29）。
+> ⚠️ 计数口径提醒：`npm test` = vitest **290** + node:test 3 = **293 条**。写 PR 描述或文档时别只抄 vitest 数字又说「npm test N passed」——PR #62 描述里写「vitest 22 passed」就是这个错（当时实际已是 29）。
 > ⚠️ 本基线在 2026-11-03 之后长期未更新（一直写 29 passed），11-10 / 11-11 两次实测发现落后 200+ 条。**凡测试用例数有变化，当次 PR 必须同批更新此行。**
 
 **两条必须记住的规则**：
 
 1. **`vue-tsc -b` 只走 `references`**，新增目录（如 `tests/`）不主动挂 project 就**永远假绿**。验证覆盖是否成立只能用**负向注入**（往目标文件写一行类型错误，看 `build` 是否变 EXIT 2），不能看「build 成功」就当覆盖了。
 2. **写测试必须做反证**：断言通过 ≠ 覆盖成立。绿可能来自 ①真的覆盖了 ②自己重复造了被测依赖（在 `beforeEach` 里自装 mock，spec 压根没依赖 `setup.ts`）③压根没执行到断言。唯一判定法是——**把你声称守护的那个依赖拿掉，看测试是否变红**。PR #56 第一版就是典型的假覆盖：9 条全绿，但摘掉 `setup.ts` 的 mock 后仍然 9 条全绿。
+
+**2026-11-17 新增第 3 条教训（真实线上 bug）**：`src/components/ContractTool.vue` 的 `decodeRevertReason` 里 `Error(string)` 分支偏移量多算一格（`slice(offset + 64, offset + 128)` 当作长度字），导致**任何标准 revert 消息都解码成空串**——用户在合约交互工具里发交易失败，看到的永远是「❌ 上链失败，错误信息是：」后面一片空白。`offset` 已是「字节偏移 × 2 = hex 字符偏移」，再 +32 字节（+64 字符）就越过了长度字、直接读进内容区，parseInt 得到 `4.7e76` 这种量级，最终 slice 越界。
+
+它能在线上活很久的原因不是隐蔽，而是**恰好落在所有门禁的盲区交集**：组件层不在 `check-feature-roadmap.ts` 扫描范围（只扫 `src/views/`）、不在 `route-gap.spec.ts` 遍历范围（同样只 views）、也没有任何 spec 引用它。三道闸全绿。
+
+另一层：这个函数**纯、无副作用、10 行**，是整条链路上唯一可离线验证的部分，却被埋在 673 行组件里。抽到 `src/utils/revert.ts` 后 14 条用例 10ms 跑完。**「能在 10 毫秒内测完的逻辑，不要留在需要模拟钱包、RPC、区块确认的地方」**——不是测试难写，是位置放错了。
 
 **合并请求自动验收（本分支新增，尚未上线）**：`pr-validation.yml` 对目标 `explorer-v2` 的合并请求执行路线图检查、`npm test` 与 `npm run build`；还支持合并队列与手动触发。只读权限、无部署步骤，不更改原 Pages 工作流。平台运行与必需状态检查仍待提交后由维护者确认；首次外部分支运行可能需要批准，不能把“无检查”当成通过。详见 `docs/pr-validation.md`。
 
@@ -416,7 +423,8 @@ src/design-system/
 
 ---
 
-*最后更新：2026-11-17（大白 💎）—— **项目目标修订**：v1 功能 100% 移植，P4 废弃结论作废，新增 P5-1~P5-8 对等补齐批次，并新建 `docs/v1-parity-checklist.md` 作为字段级对等基线。本次仅改文档，未动代码，测试基线与门禁不变。*
+*最后更新：2026-11-20（大白 💎）—— 修 `ContractTool.vue` revert 解码真实 bug（`Error(string)` 偏移量多算一格，任何标准 revert 消息都解成空串）并抽到 `src/utils/revert.ts`，新增 `tests/revert-decode.spec.ts` 14 条；基线 276 → **290 passed（24 files）**（含 node:test 3 = 293）。该 bug 正是 11-16 登记的「组件层无门禁」缺口的第一例实证。*
+*（同日另记）**项目目标修订**：v1 功能 100% 移植，P4 废弃结论作废，新增 P5-1~P5-8 对等补齐批次，并新建 `docs/v1-parity-checklist.md` 作为字段级对等基线（该文档改动未影响测试基线）。*
 
 
 ### PR #66 审计补全（2026-11-03）

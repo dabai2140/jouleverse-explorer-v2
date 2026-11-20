@@ -122,13 +122,14 @@
 import { computed, ref } from 'vue'
 import { getPublicClient } from '@wagmi/core'
 import { writeContract, waitForTransactionReceipt } from 'wagmi/actions'
-import { WaitForTransactionReceiptTimeoutError, hexToString } from 'viem'
+import { WaitForTransactionReceiptTimeoutError } from 'viem'
 import type { TransactionReceipt } from 'viem'
 import { config, useWalletStore } from '../stores/wallet'
 import JvHashText from '../design-system/components/JvHashText.vue'
 import JvActionButton from '../design-system/components/JvActionButton.vue'
 import PinPanel from './PinPanel.vue'
 import type { ToolboxContract } from '../contracts/toolbox'
+import { decodeRevertReason } from '../utils/revert'
 
 const props = defineProps<{ contract: ToolboxContract }>()
 
@@ -173,32 +174,6 @@ function selectFunction(fn: AbiFunction) {
   txHash.value = ''
   txStatus.value = ''
   receipt.value = null
-}
-
-// 解码 revert data：Error(string) 与 Panic(uint256)
-function decodeRevertReason(data: string): string {
-  try {
-    if (data.startsWith('0x08c379a0')) {
-      // Error(string) — require/revert 带消息
-      const body = data.slice(10)
-      const offset = parseInt(body.slice(0, 64), 16) * 2
-      const len = parseInt(body.slice(offset + 64, offset + 128), 16)
-      const content = body.slice(offset + 128, offset + 128 + len * 2)
-      return hexToString(`0x${content}`)
-    }
-    if (data.startsWith('0x4e487b71')) {
-      // Panic(uint256) — 编译器内建错误
-      const code = BigInt('0x' + data.slice(10, 74))
-      const panicMap: Record<string, string> = {
-        '1': 'assert 失败', '17': '算术溢出', '18': '除以零', '33': '枚举值越界',
-        '34': '存储字节数组越界', '49': 'pop 空数组', '50': '数组越界', '65': '分配内存溢出', '81': '内部函数调用错误',
-      }
-      return `Panic(${code}): ${panicMap[code.toString()] || '未知错误'}`
-    }
-    return `revert data: ${data.slice(0, 18)}...`
-  } catch {
-    return ''
-  }
 }
 
 // 通过 eth_call 重放交易获取合约 revert 原因
