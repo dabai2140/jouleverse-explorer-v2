@@ -23,6 +23,17 @@
             <span class="label">区块</span>
             <JvHashText :value="String(transaction.blockNumber)" type="block" :truncate="0" />
           </div>
+          <!-- v1 transactionInfos.html 有「区块哈希」行，可点进区块页 -->
+          <div class="info-item">
+            <span class="label">区块哈希</span>
+            <JvHashText
+              v-if="transaction.blockHash"
+              :value="transaction.blockHash"
+              type="block"
+              :truncate="10"
+            />
+            <span v-else class="muted">待打包…</span>
+          </div>
           <div class="info-item">
             <span class="label">确认数</span>
             <span v-if="confirmations !== null" class="value">{{ confirmations }} 个区块</span>
@@ -34,20 +45,21 @@
           </div>
           <div class="info-item">
             <span class="label">发送方</span>
-            <JvHashText :value="transaction.from" type="address" :truncate="8" />
+            <AddressWithLabel :address="transaction.from" :truncate="8" />
           </div>
           <div class="info-item">
             <span class="label">接收方</span>
-            <JvHashText v-if="transaction.to" :value="transaction.to" type="address" :truncate="8" />
+            <AddressWithLabel v-if="transaction.to" :address="transaction.to" :truncate="8" />
             <span v-else class="value">合约创建</span>
           </div>
           <div class="info-item">
             <span class="label">发送金额</span>
             <JvAmount :value="transaction.value" unit="J" />
           </div>
-          <div class="info-item" v-if="transaction.gasPrice">
+          <!-- v1 双单位：{{gasPrice}} J (约 {{gasPriceGwei}} Gwei) -->
+          <div class="info-item" v-if="gasPriceDual">
             <span class="label">Gas 价格</span>
-            <JvAmount :value="transaction.gasPrice" :decimals="9" unit="Gwei" :maxDecimals="4" />
+            <span class="value">{{ gasPriceDual.j }} J <span class="muted">(约 {{ gasPriceDual.gwei }} Gwei)</span></span>
           </div>
           <div class="info-item">
             <span class="label">Gas 限制</span>
@@ -59,22 +71,43 @@
           </div>
           <div class="info-item">
             <span class="label">交易手续费</span>
-            <JvAmount v-if="txFee !== null" :value="txFee" unit="J" :maxDecimals="6" />
+            <span v-if="txFeeDual" class="value">
+              {{ txFeeDual.j }} J <span class="muted">(约 {{ txFeeDual.gwei }} Gwei)</span>
+            </span>
             <span v-else class="muted">—</span>
           </div>
           <div class="info-item">
             <span class="label">随机数</span>
             <span class="value">{{ transaction.nonce }}</span>
           </div>
-          <div class="info-item">
+          <div class="info-item info-item--input">
             <span class="label">输入数据</span>
             <div class="value mono input-value">
               <span v-if="!transaction.input || transaction.input === '0x'" class="muted">无</span>
               <template v-else>
-                <span class="input-text">{{ inputExpanded ? transaction.input : formatInput(transaction.input) }}</span>
+                <!-- ABI 解码视图（v1 可在「原始数据 ←→ ABI 解码」切换） -->
+                <template v-if="inputMode === 'decoded' && decodedInput">
+                  <div class="decoded">
+                    <div class="decoded-head">
+                      <span class="decoded-fn">{{ decodedInput.functionName }}<span class="decoded-sig">({{ decodedInput.argTypes }})</span></span>
+                      <span class="decoded-by">{{ decodedInput.contractName }}</span>
+                    </div>
+                    <div v-for="(arg, i) in decodedInput.args" :key="i" class="decoded-arg">
+                      <span class="decoded-arg-name">{{ arg.name || `#${i}` }}</span>
+                      <span class="decoded-arg-type">{{ arg.type }}</span>
+                      <span class="decoded-arg-value">{{ arg.value }}</span>
+                    </div>
+                    <div v-if="decodedInput.args.length === 0" class="muted">该函数无参数</div>
+                  </div>
+                </template>
+                <span v-else class="input-text">{{ inputExpanded ? transaction.input : formatInput(transaction.input) }}</span>
                 <span class="input-actions">
-                  <button v-if="transaction.input.length > 50" class="input-btn" @click="inputExpanded = !inputExpanded">
+                  <button v-if="transaction.input.length > 50 && inputMode === 'raw'" class="input-btn" @click="inputExpanded = !inputExpanded">
                     {{ inputExpanded ? '收起' : '展开' }}
+                  </button>
+                  <!-- 只有解得出时才给切换按钮，否则点了变成「解不出」的空状态更让人困惑 -->
+                  <button v-if="decodedInput" class="input-btn" @click="toggleInputMode">
+                    {{ inputMode === 'raw' ? '尝试 ABI 解码' : '查看原始数据' }}
                   </button>
                   <button class="input-btn" @click="copyInput">
                     {{ copyState === 'copied' ? '已复制' : copyState === 'error' ? '复制失败' : '复制' }}
@@ -104,6 +137,9 @@
 import { ref, computed, onMounted, onScopeDispose } from 'vue'
 import { publicClient } from '../config/client'
 import { formatNumber, formatAge } from '../utils/format'
+import { toDualUnit, computeTxFee } from '../utils/amount-dual'
+import { decodeInput } from '../utils/abi-decode'
+import AddressWithLabel from '../components/AddressWithLabel.vue'
 import { JvHashText, JvStatusTag, JvAmount, JvPageState } from '../design-system'
 
 interface Props {
@@ -117,6 +153,8 @@ const loading = ref(true)
 const confirmations = ref<number | null>(null)
 const txHash = ref(props.hash)
 const inputExpanded = ref(false)
+/** 输入数据展示模式：raw（原始 hex）/ decoded（ABI 解码）。v1 用 inputFormat 做同一件事 */
+const inputMode = ref<'raw' | 'decoded'>('raw')
 const copyState = ref<'idle' | 'copied' | 'error'>('idle')
 let copyTimer: ReturnType<typeof setTimeout> | undefined
 
@@ -142,13 +180,25 @@ const formatTimestamp = (timestamp: bigint): string => {
 const txFee = computed<bigint | null>(() => {
   const t = transaction.value
   if (!t) return null
-  const gasUsed = t.gasUsed ?? null
-  const price = t.effectiveGasPrice ?? t.gasPrice ?? null
-  if (gasUsed == null || price == null) return null
-  const gasUsedBig = typeof gasUsed === 'bigint' ? gasUsed : BigInt(gasUsed)
-  const priceBig = typeof price === 'bigint' ? price : BigInt(price)
-  return gasUsedBig * priceBig
+  return computeTxFee(t.gasUsed ?? null, t.effectiveGasPrice ?? t.gasPrice ?? null)
 })
+
+// 双单位换算（v1 对 gasPrice / 手续费都给 J + Gwei 两档）
+// gasPrice：保留小数（v1 用 parseInt 把 2.500000007 显示成 2，属呈现缺陷，不回退）
+// 手续费：Gwei 档固定整数（真实值 610815.00171 Gwei 的小数位是 noise，v1 也是整数）
+const gasPriceDual = computed(() => toDualUnit(transaction.value?.gasPrice ?? null))
+const txFeeDual = computed(() => toDualUnit(txFee.value, { gweiMaxDecimals: 0 }))
+
+// ABI 解码：只有解得出才暴露切换入口，解不出保持原始数据（与 v1 行为一致）
+const decodedInput = computed(() => {
+  const input = transaction.value?.input
+  if (!input || input === '0x') return null
+  return decodeInput(input)
+})
+
+const toggleInputMode = () => {
+  inputMode.value = inputMode.value === 'raw' ? 'decoded' : 'raw'
+}
 
 const formatInput = (input: string): string => {
   if (!input || input === '0x') return '无'
@@ -181,7 +231,13 @@ const loadTransaction = async () => {
       publicClient.getBlockNumber(),
     ])
     const block = await publicClient.getBlock({ blockNumber: txData.blockNumber! })
-    transaction.value = { ...txData, ...receipt, blockTimestamp: block.timestamp }
+    // 区块哈希优先取回执里的（已确认）；未确认交易没有回执 blockHash，用 tx.blockHash
+    transaction.value = {
+      ...txData,
+      ...receipt,
+      blockHash: receipt.blockHash ?? txData.blockHash ?? null,
+      blockTimestamp: block.timestamp,
+    }
     if (receipt.blockNumber != null) {
       confirmations.value = Math.max(0, Number(latestBlock) - Number(receipt.blockNumber) + 1)
     }
@@ -272,6 +328,65 @@ onMounted(() => { loadTransaction() })
   flex-direction: column;
   align-items: flex-end;
   gap: 6px;
+}
+
+/* 输入数据行：解码后内容可能多行，左侧标签顶部对齐更好读 */
+.info-item--input { align-items: flex-start; }
+.info-item--input .label { padding-top: 2px; }
+
+.decoded {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-family: var(--jv-font-mono);
+  font-size: 0.82rem;
+}
+
+.decoded-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.decoded-fn {
+  color: var(--jv-brand);
+  font-weight: 600;
+}
+
+.decoded-sig { color: var(--jv-text-muted); font-weight: 400; }
+
+.decoded-by {
+  font-size: 0.75rem;
+  color: var(--jv-text-muted);
+  border: 1px solid var(--jv-border);
+  border-radius: 999px;
+  padding: 0 6px;
+  font-family: inherit;
+}
+
+.decoded-arg {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.decoded-arg-name { color: var(--jv-text-secondary); }
+
+.decoded-arg-type {
+  color: var(--jv-text-muted);
+  font-size: 0.75rem;
+}
+
+.decoded-arg-value {
+  color: var(--jv-text-primary);
+  word-break: break-all;
+  text-align: right;
+  max-width: 100%;
 }
 
 .input-text {

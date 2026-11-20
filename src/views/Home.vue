@@ -63,6 +63,17 @@
             </li>
           </ul>
         </div>
+        <!-- 一键添加/切换主网（v1 main.html:66-69 switchNetwork 对等）
+             只在检测不到该链时才有意义，所以按钮常驻、点了自己判断切换还是添加 -->
+        <div class="network-add">
+          <button class="add-network-btn" @click="handleAddNetwork" :disabled="addNetworkBusy">
+            <span class="add-network-icon">⛓</span>
+            {{ addNetworkBusy ? '处理中…' : '一键添加 Jouleverse 主网' }}
+          </button>
+          <span v-if="addNetworkMessage" class="add-network-msg" :class="addNetworkOk ? 'ok' : 'warn'">
+            {{ addNetworkMessage }}
+          </span>
+        </div>
       </div>
 
       <!-- Timelock 能量信息 -->
@@ -163,6 +174,7 @@ import {
   type SearchUnknownReason,
 } from '../utils/search-resolve'
 import { JvLoading, JvPageState, JvHashText } from '../design-system'
+import { switchOrAddChain, outcomeMessage, type Eip1193Provider } from '../utils/add-chain'
 import { t } from '../i18n'
 
 const router = useRouter()
@@ -183,6 +195,26 @@ const blocks = ref<Block[]>([])
 const latestBlock = ref<Block | null>(null)
 const loading = ref(false)
 const searchQuery = ref('')
+
+// 一键添加主网的状态（v1 用 alert 弹窗，v2 用行内提示，不打断阅读）
+const addNetworkBusy = ref(false)
+const addNetworkMessage = ref('')
+const addNetworkOk = ref(false)
+
+const handleAddNetwork = async () => {
+  if (addNetworkBusy.value) return
+  addNetworkBusy.value = true
+  addNetworkMessage.value = ''
+  try {
+    // window.ethereum 未注入时不报错，交给 switchOrAddChain 返回 no-provider
+    const provider = (globalThis as { ethereum?: Eip1193Provider }).ethereum
+    const outcome = await switchOrAddChain(provider)
+    addNetworkOk.value = outcome.status === 'switched' || outcome.status === 'added'
+    addNetworkMessage.value = outcomeMessage(outcome)
+  } finally {
+    addNetworkBusy.value = false
+  }
+}
 const networkUptime = ref('')
 const wsConnected = ref(false)
 
@@ -503,6 +535,45 @@ onUnmounted(() => { unwatchBlocks?.() })
   margin-left: 6px;
 }
 .quick-link:hover { text-decoration: underline; color: var(--jv-link-hover); }
+
+/* 一键添加主网：与「快速链接」同一视觉层级，不抢搜索框的位置 */
+.network-add {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.add-network-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--jv-border);
+  background: var(--jv-bg-surface);
+  color: var(--jv-text-secondary);
+  font-size: 0.82rem;
+  padding: 5px 12px;
+  border-radius: var(--jv-radius-md);
+  cursor: pointer;
+  transition: border-color var(--jv-duration-fast) var(--jv-ease),
+              color var(--jv-duration-fast) var(--jv-ease);
+}
+.add-network-btn:hover:not(:disabled) {
+  border-color: var(--jv-brand);
+  color: var(--jv-brand);
+}
+.add-network-btn:disabled { cursor: default; opacity: 0.65; }
+.add-network-btn:focus-visible {
+  outline: 2px solid var(--jv-brand);
+  outline-offset: 2px;
+}
+
+.add-network-icon { font-size: 0.9em; }
+
+.add-network-msg { font-size: 0.8rem; }
+.add-network-msg.ok { color: var(--jv-success); }
+.add-network-msg.warn { color: var(--jv-warning, var(--jv-text-muted)); }
 
 /* 搜索帮助面板：只在解析失败时出现，用侧边竖线而非红框，
    因为「没搜到」多数不是错误，只是格式不认识 */
