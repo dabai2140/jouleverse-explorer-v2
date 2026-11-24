@@ -54,6 +54,9 @@
         <span class="did-name">{{ result.jnsId }}</span>
         <button class="did-link" @click="$router.push(`/jns/${result.jnsId}`)">域名详情 ↗</button>
       </div>
+      <p v-if="caseTwinHint" class="did-case-hint">
+        ⚠️ 该域名含大写字母，与 <span class="mono">{{ result.jnsId.toLowerCase() }}</span> 是<strong>两个不同</strong>的域名（不同 tokenId / 不同持有者）。当前显示的是大写这一个。
+      </p>
       <!-- 地址视图按绑定地址渲染；:key 保证换域名时彻底重建，不残留上一份状态 -->
       <AddressDetail :key="result.boundAddress" :address="result.boundAddress" />
     </template>
@@ -69,15 +72,29 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { JvLoading, JvPageState, JvHashText } from '../design-system'
 import AddressDetail from './AddressDetail.vue'
 import { resolveDid, type DidResolveResult } from '../utils/did-resolve'
+import { isCaseSensitiveName } from '../utils/jns-endorse'
 
 interface Props { jnsId: string }
 const props = defineProps<Props>()
 
 const loading = ref(false)
+
+/**
+ * 只在「该域名是小写版也存在的那几个大小写敏感名」时提示。
+ * GM / Nana 不需要提示（链上没有 gm / nana，不存在混淆）。
+ */
+const caseTwinHint = computed(() => {
+  const r = result.value
+  if (!r || (r.kind !== 'ok' && r.kind !== 'unbound')) return false
+  const bare = r.jnsId.slice(0, -2)
+  if (!isCaseSensitiveName(bare)) return false
+  // 有孪生的才提示；GM/Nana 这类没有小写版本的不提示
+  return bare !== bare.toLowerCase()
+})
 const error = ref('')
 const result = ref<DidResolveResult | null>(null)
 
@@ -128,6 +145,11 @@ watch(() => props.jnsId, load)
 }
 .did-link:hover { text-decoration: underline; }
 
+.did-case-hint {
+  font-size: 12px; line-height: 1.6; color: var(--jv-warning, #f5a524);
+  margin: 0 0 16px; padding: 0 2px;
+}
+.mono { font-family: var(--jv-font-mono); }
 .owner-row {
   display: flex; align-items: center; gap: 10px;
   margin-top: 12px; font-size: 13px;
