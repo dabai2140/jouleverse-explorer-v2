@@ -25,6 +25,10 @@
     <!-- 错误提示 -->
     <JvPageState v-if="error" type="search-empty" :description="error" />
 
+    <!-- owner-only mint：v1 只在「域名不存在 + 本链 + 本人是合约 owner」时显示 🔨。
+         ⚠️ 必须放在 domainInfo 块之外 —— 域名存在时 mint 没有意义，放在里面就永远看不见。 -->
+    <JnsMintPanel v-if="showMintPanel" @minted="onMinted" />
+
     <!-- ===== 域名信息 ===== -->
     <div v-if="domainInfo" class="domain-info">
       <!-- 域名卡片 -->
@@ -138,8 +142,6 @@
         :owner="domainInfo.owner"
       />
 
-      <!-- owner-only mint（v1: 域名不存在 + 本链 + 本人是合约 owner） -->
-      <JnsMintPanel v-if="showMintPanel" @minted="onMinted" />
     </div>
 
     <!-- ===== 钱包操作(绑定/解绑/发送) ===== -->
@@ -407,15 +409,19 @@ const loadJnsContractOwner = async () => {
  * mint 入口可见性：v1 条件 = 域名不存在 + 本链 + 本人是合约 owner。
  * 「域名不存在」在这里体现为 domainInfo 为空（或搜索报错）。
  */
-const showMintPanel = computed(() => canMintJns({
-  connectedAccount: walletStore.address,
-  contractOwner: jnsContractOwner.value,
-  chainId: 3666,
-  exists: !!domainInfo.value,
-}))
+const showMintPanel = computed(() => {
+  // 没有任何查询时（刚进 /jns）不显示：v1 的按钮也挂在「已输入一个不存在的域名」之后
+  if (!searchQuery.value.trim()) return false
+  return canMintJns({
+    connectedAccount: walletStore.address,
+    contractOwner: jnsContractOwner.value,
+    chainId: 3666,
+    exists: !!domainInfo.value,
+  })
+})
 
-/** 铸造成功后刷新（域名现在存在了，mint 入口会自动消失） */
-const onMinted = () => { /* 顶层有 searchQuery 时重新查一次即可 */ }
+/** 铸造成功后重新查一次：域名现在存在了，mint 入口会自动消失 */
+const onMinted = () => { searchDomain() }
 
 /** 连接钱包 */
 const connectWallet = async () => {
