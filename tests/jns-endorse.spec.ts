@@ -107,20 +107,51 @@ describe('parseEndorseAmount — 打赏金额边界（0 < x ≤ 100 WJ）', () =
   })
 })
 
-describe('normalizeJnsId — DID 页域名规范化（含 v1 两个大小写特例）', () => {
-  it('普通域名转小写', () => {
-    expect(normalizeJnsId('Alice.j')).toBe('alice.j')
-    expect(normalizeJnsId('  alice.J  ')).toBe('alice.j')
+describe('normalizeJnsId — DID 页域名规范化', () => {
+  /**
+   * 链上事实（2026-11-24 全量扫 822 个 token 实测）：
+   *   _nslookup 区分大小写，且含大写的 7 个域名里，有 5 个**存在小写孪生域名**
+   *   （WJ.TV=652 与 wj.tv=815、DC=653 与 dc=816 …）。两者 tokenId/owner 都不同。
+   *   所以「一律小写化」不能只算不精确，而是**会返回另一个域名的数据**。
+   */
+  it('普通全小写域名原样通过', () => {
+    expect(normalizeJnsId('alice.j')).toBe('alice.j')
+    expect(normalizeJnsId('  alice.j  ')).toBe('alice.j')
   })
 
-  it('gm.j → GM.j（链上真实大小写，v1 硬编码还原）', () => {
+  it('大小写敏感域名保留原始大小写（原样命中优先于小写化）', () => {
+    for (const n of ['GM', 'Nana', 'WJ.TV', 'DC', 'MC', 'Bybit', 'Trader']) {
+      expect(normalizeJnsId(`${n}.j`), `${n}.j 必须原样保留`).toBe(`${n}.j`)
+    }
+  })
+
+  it('🔴 WJ.TV 不得被小写成 wj.tv（那是另一个真实域名 tokenId 815）', () => {
+    expect(normalizeJnsId('WJ.TV.j')).toBe('WJ.TV.j')
+    expect(normalizeJnsId('wj.tv.j')).toBe('wj.tv.j')
+    // 关键：大小写两个指向不同结果，不能混为一谈
+    expect(normalizeJnsId('WJ.TV.j')).not.toBe(normalizeJnsId('wj.tv.j'))
+  })
+
+  it('用户把小写孪生域名敲成大写 → 保持大写（那是它自己）', () => {
+    expect(normalizeJnsId('wj.tv.j')).toBe('wj.tv.j')
+    expect(normalizeJnsId('dc.j')).toBe('dc.j')
+    expect(normalizeJnsId('trader.j')).toBe('trader.j')
+  })
+
+  it('gm.j → GM.j（v1 便利行为，因链上无 gm 这个小写域名）', () => {
     expect(normalizeJnsId('gm.j')).toBe('GM.j')
     expect(normalizeJnsId('GM.J')).toBe('GM.j')
+    expect(normalizeJnsId('GM.j')).toBe('GM.j')
   })
 
   it('nana.j → Nana.j', () => {
     expect(normalizeJnsId('nana.j')).toBe('Nana.j')
     expect(normalizeJnsId('NANA.j')).toBe('Nana.j')
+  })
+
+  it('⚠️ 有孪生的大写名不做小写回退：Bybit.j 不会退化成 bybit.j', () => {
+    expect(normalizeJnsId('Bybit.j')).toBe('Bybit.j')
+    expect(normalizeJnsId('BYBIT.j')).toBe('bybit.j') // 全大写输入无法区分，按小写处理
   })
 
   it('缺 .j 后缀返回 null', () => {
@@ -132,10 +163,16 @@ describe('normalizeJnsId — DID 页域名规范化（含 v1 两个大小写特�
     expect(normalizeJnsId('.j')).toBeNull()
   })
 
-  it('非法字符返回 null（下划线、空格、中文、点号）', () => {
-    for (const v of ['a_b.j', 'a b.j', '中文.j', 'a.b.j']) {
+  it('非法字符返回 null（下划线、空格、中文）', () => {
+    for (const v of ['a_b.j', 'a b.j', '中文.j']) {
       expect(normalizeJnsId(v), `应拒绝 ${v}`).toBeNull()
     }
+  })
+
+  it('内部点号允许（链上有 WJ.TV 这种真实域名），但首尾点号拒绝', () => {
+    expect(normalizeJnsId('WJ.TV.j')).toBe('WJ.TV.j')
+    expect(normalizeJnsId('.abc.j')).toBeNull()
+    expect(normalizeJnsId('abc..j')).toBeNull()
   })
 
   it('null / undefined / 空串返回 null', () => {
