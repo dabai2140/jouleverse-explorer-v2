@@ -164,12 +164,8 @@ export function parseJunkMetadata(tokenURI: unknown): JunkMetadata | null {
   if (!head.includes('base64')) return null
   let json: unknown
   try {
-    // atob 在浏览器和 Node 18+ 都有；这里用 Buffer 兜底以同时适配 vitest 的 jsdom
-    const text =
-      typeof atob === 'function'
-        ? atob(body)
-        : Buffer.from(body, 'base64').toString('binary')
-    json = JSON.parse(text)
+    // atob 在浏览器和 Node 18+ 都有（jsdom 也提供），不需要 Buffer 兜底
+    json = JSON.parse(atob(body))
   } catch {
     return null
   }

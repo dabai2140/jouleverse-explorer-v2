@@ -4,7 +4,6 @@ import { join } from 'node:path'
 import {
   PAGE_SIZE,
   NORMAL_PAGES,
-  BROKEN_PAGE_BASE,
   PRECIOUS_PAGE,
   RARE_PAGE,
   LEGEND_PAGE,
