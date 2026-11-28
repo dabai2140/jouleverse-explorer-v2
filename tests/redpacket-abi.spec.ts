@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { encodeFunctionData, parseAbi } from 'viem'
+import { encodeFunctionData } from 'viem'
 import { wjABI } from '../src/contracts/wj'
 import { redPacketABI } from '../src/contracts/redpacket'
 
@@ -38,6 +38,18 @@ describe('wjABI — approve / allowance 补齐', () => {
   })
 })
 
+type AbiFn = {
+  name: string
+  inputs: { name: string }[]
+  outputs: { name: string; components?: { name: string }[] }[]
+}
+
+const fn = (name: string): AbiFn => {
+  const entry = redPacketABI.find(item => item.type === 'function' && item.name === name)
+  if (!entry) throw new Error(`ABI 里没有 ${name}`)
+  return entry as unknown as AbiFn
+}
+
 describe('redPacketABI — 与 v1 redpacket.sol 的函数集合一致', () => {
   const names = redPacketABI
     .filter(item => item.type === 'function')
@@ -62,9 +74,7 @@ describe('redPacketABI — 与 v1 redpacket.sol 的函数集合一致', () => {
   })
 
   it('redpackets 返回 10 个字段，顺序与合约 struct 一致', () => {
-    const entry = redPacketABI.find(item => item.type === 'function' && item.name === 'redpackets')
-    const outputs = (entry as { outputs: { name: string }[] }).outputs
-    expect(outputs.map(o => o.name)).toEqual([
+    expect(fn('redpackets').outputs.map(o => o.name)).toEqual([
       'created', 'creator', 'expiry',
       'total_e', 'total_n', 'left_e', 'left_n',
       'final_e', 'final_n', 'last_seed',
@@ -72,20 +82,14 @@ describe('redPacketABI — 与 v1 redpacket.sol 的函数集合一致', () => {
   })
 
   it('inspect 返回 (e, opener, block_height) 三元组', () => {
-    const entry = redPacketABI.find(item => item.type === 'function' && item.name === 'inspect')
-    const components = (entry as { outputs: { components: { name: string }[] }[] }).outputs[0]!.components
-    expect(components.map(c => c.name)).toEqual(['e', 'opener', 'block_height'])
+    expect(fn('inspect').outputs[0]!.components!.map(c => c.name)).toEqual(['e', 'opener', 'block_height'])
   })
 
   it('create 的参数是 (id, quantity, amount) —— 注意顺序，写反会白送钱', () => {
-    const entry = redPacketABI.find(item => item.type === 'function' && item.name === 'create')
-    const inputs = (entry as { inputs: { name: string }[] }).inputs
-    expect(inputs.map(i => i.name)).toEqual(['id', 'quantity', 'amount'])
+    expect(fn('create').inputs.map(i => i.name)).toEqual(['id', 'quantity', 'amount'])
   })
 
   it('open 的参数是 (id, lucky_n)', () => {
-    const entry = redPacketABI.find(item => item.type === 'function' && item.name === 'open')
-    const inputs = (entry as { inputs: { name: string }[] }).inputs
-    expect(inputs.map(i => i.name)).toEqual(['id', 'lucky_n'])
+    expect(fn('open').inputs.map(i => i.name)).toEqual(['id', 'lucky_n'])
   })
 })
