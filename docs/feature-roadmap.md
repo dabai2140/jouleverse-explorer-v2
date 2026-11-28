@@ -53,8 +53,9 @@
 | 33 | 通用经典多签管理 | ✅ 已完成 | `Multisig.vue` | `/tools/multisig`；任意兼容地址、分页、审阅、发送前复核 |
 | 34 | 链上交易核验与记录导出工具 | ✅ 已完成 | `ReceiptVerifier.vue` + `services/receipt-verifier.ts` | `/tools/receipt`；最多5个只读请求；归属一致性/重组检查；机器可读快照导出；不等于支付/履约成功，详见 `receipt-verifier.md` |
 | 35 | 生态接入验收 | ✅ 已完成 | `NetworkReadiness.vue` + `services/network-readiness.ts` | `/tools/integration`；本地清单导出、最多8次只读请求、能力边界明确；详见network-readiness.md |
+| 36 | 链上红包（创建/抢/取回） | ✅ 已完成 | `RedPacket.vue` + `composables/useRedPacket.ts` + `utils/redpacket.ts` | `/redpacket`（创建）+ `/redpacket/:packetId`（抢）；对齐 v1 `redpacketInfo.html`：≤2000 WJ / ≤500 个、WJ 授权、幸运数字抽签、JTI 资格、每地址每包一次、领取记录、过期发起人取回；合约 `openers` 为 private 无 getter，历史靠 `inspect` 有界遍历（≤500） |
 
-> **本表覆盖度自检（2026-11-03 更新，并行 PR #65/#66/#67/#68 合入后顺延编号）**：`src/views/` 下共 **22** 个视图，本表 #1–#35 已全部覆盖（0 漏项）。
+> **本表覆盖度自检（2026-11-28 更新，新增 P5-5 红包页）**：`src/views/` 下共 **23** 个视图，本表 #1–#36 已全部覆盖（0 漏项）。
 > 注：#29 是组件层（`components/` + `composables/`）而非独立视图，从 #36 起如再新增组件级模块可延续此编号。
 > 复算方法：
 > ```bash
